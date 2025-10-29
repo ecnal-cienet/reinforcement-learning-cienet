@@ -1,0 +1,14 @@
+# Core numerical computing
+numpy>=1.24.0
+
+# JAX ecosystem for deep learning
+jax>=0.4.20
+jaxlib>=0.4.20
+flax>=0.8.0
+optax>=0.1.9
+
+# Reinforcement learning environments
+gymnasium>=0.29.0
+
+# Probability distributions for continuous action spaces
+tensorflow-probability[jax]>=0.22.0
