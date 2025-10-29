@@ -1,4 +1,4 @@
-# 強化學習 (RL) 完整學習筆記 (README.md)
+# 強化學習 (Reinforcement Learning, RL)：從入門到放棄
 
 這份文件涵蓋了從強化學習 (RL) 的核心概念，到 Deep Q-Networks (DQN)，再到 Proximal Policy Optimization (PPO) 的完整理論與實作筆記。
 
