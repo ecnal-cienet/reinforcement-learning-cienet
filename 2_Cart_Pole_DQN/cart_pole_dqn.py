@@ -26,11 +26,13 @@ EPSILON_START = 1.0
 EPSILON_END = 0.01
 EPSILON_DECAY = 0.995
 
+
 # --- 2. 使用 Flax NNX 定義 Q-Network ---
 class QNetwork(nnx.Module):
     """
     DQN 的神經網路模型 (函數近似器).
     """
+
     def __init__(self, in_features: int, out_features: int, *, rngs: nnx.Rngs):
         """
         定義網路結構: Input(4) -> 64 -> 64 -> Output(2)
@@ -55,25 +57,29 @@ class QNetwork(nnx.Module):
         x = nnx.relu(self.fc2(x))
         return self.fc3(x)  # 輸出原始 Q 值 (Logits)
 
+
 # --- 3. 經驗回放 (Replay Buffer) ---
 class ReplayBuffer:
     """
     用於儲存和抽樣 (s, a, r, s', done) 經驗的記憶體.
     """
+
     def __init__(self, capacity: int):
         self.buffer = deque(maxlen=capacity)
 
-    def add(self, state, action, reward, next_state, done): # pylint: disable=too-many-arguments
+    def add(self, state, action, reward, next_state, done):  # pylint: disable=too-many-arguments
         """
         將一筆經驗存入記憶體.
         """
-        self.buffer.append((
-            np.expand_dims(state, 0),
-            action,
-            reward,
-            np.expand_dims(next_state, 0),
-            done
-        ))
+        self.buffer.append(
+            (
+                np.expand_dims(state, 0),
+                action,
+                reward,
+                np.expand_dims(next_state, 0),
+                done,
+            )
+        )
 
     def sample(self, batch_size: int):
         """
@@ -87,11 +93,12 @@ class ReplayBuffer:
             np.array(actions),
             np.array(rewards, dtype=np.float32),
             np.concatenate(next_states),
-            np.array(dones, dtype=np.bool_)
+            np.array(dones, dtype=np.bool_),
         )
 
     def __len__(self):
         return len(self.buffer)
+
 
 # --- 4. DQN Agent (最核心的類別) ---
 # pylint: disable=too-many-instance-attributes
@@ -99,6 +106,7 @@ class DQNAgent:
     """
     DQN Agent, 封裝了神經網路、優化器、經驗回放和訓練邏輯.
     """
+
     def __init__(self, state_dim, action_dim, *, rng_key):
         self.state_dim = state_dim
         self.action_dim = action_dim
@@ -182,6 +190,7 @@ class DQNAgent:
         _, grads = nnx.value_and_grad(loss_fn)(self.online_network)
         self.optimizer.update(grads)
 
+
 # --- 5. 訓練迴圈 ---
 # pylint: disable=too-many-locals
 def main():
@@ -235,11 +244,14 @@ def main():
         total_rewards.append(episode_reward)
         if (episode + 1) % 50 == 0:
             avg_reward = np.mean(total_rewards[-50:])
-            print(f"Episode {episode + 1}, Epsilon: {agent.epsilon:.3f}, "
-                  f"Avg Reward (last 50): {avg_reward:.2f}")
+            print(
+                f"Episode {episode + 1}, Epsilon: {agent.epsilon:.3f}, "
+                f"Avg Reward (last 50): {avg_reward:.2f}"
+            )
 
     env.close()
     print("訓練完成！")
+
 
 if __name__ == "__main__":
     main()

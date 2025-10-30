@@ -1,71 +1,73 @@
-# Q-Learning 實作 (表格型強化學習)
+# Q-Learning Implementation (Tabular Reinforcement Learning)
 
-## 概述
+> **中文版本**: [README_ch.md](README_ch.md)
 
-這是一個經典的 **Q-Learning** 演算法實作，應用於簡單的 **4x4 網格世界 (Grid World)** 環境。Q-Learning 是一種基於價值 (Value-Based) 的無模型 (Model-Free) 強化學習演算法，特別適合狀態空間較小的離散環境。
+## Overview
 
-## 環境說明
+This is a classic **Q-Learning** algorithm implementation applied to a simple **4x4 Grid World** environment. Q-Learning is a value-based, model-free reinforcement learning algorithm, particularly suitable for discrete environments with small state spaces.
 
-### 網格世界 (Grid World)
+## Environment Description
+
+### Grid World
 
 ```
-狀態編號排列：
+State Number Layout:
 ┌────┬────┬────┬────┐
-│ 0  │ 1  │ 2  │ 3  │  起點: 狀態 0 (左上角)
+│ 0  │ 1  │ 2  │ 3  │  Start: State 0 (top-left)
 ├────┼────┼────┼────┤
 │ 4  │ 5  │ 6  │ 7  │
 ├────┼────┼────┼────┤
 │ 8  │ 9  │ 10 │ 11 │
 ├────┼────┼────┼────┤
-│ 12 │ 13 │ 14 │ 15 │  目標: 狀態 15 (右下角)
+│ 12 │ 13 │ 14 │ 15 │  Goal: State 15 (bottom-right)
 └────┴────┴────┴────┘
 ```
 
-### 環境參數
+### Environment Parameters
 
-- **狀態空間 (State Space)**：16 個離散狀態 (0 到 15)
-- **動作空間 (Action Space)**：4 個動作
-  - `0`: 上 (↑)
-  - `1`: 下 (↓)
-  - `2`: 左 (←)
-  - `3`: 右 (→)
-- **起點 (Start State)**：狀態 0 (左上角)
-- **目標 (Goal State)**：狀態 15 (右下角)
+- **State Space**: 16 discrete states (0 to 15)
+- **Action Space**: 4 actions
+  - `0`: Up (↑)
+  - `1`: Down (↓)
+  - `2`: Left (←)
+  - `3`: Right (→)
+- **Start State**: State 0 (top-left corner)
+- **Goal State**: State 15 (bottom-right corner)
 
-### 獎勵函數 (Reward Function)
+### Reward Function
 
-- **到達目標狀態 (狀態 15)**：獎勵 `+100`
-- **每移動一步**：扣 `-1` (鼓勵找到最短路徑)
+- **Reaching goal state (State 15)**: Reward `+100`
+- **Each move**: Penalty `-1` (encourages finding shortest path)
 
-## 執行方式
+## How to Run
 
-### 前置條件
+### Prerequisites
 
-確保已啟動虛擬環境並安裝相依套件：
+Ensure you've activated the virtual environment and installed dependencies:
 
 ```bash
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 執行程式
+### Execute the Program
 
 ```bash
 python 1_Q_Learning/Q_Learning.py
 ```
 
-或者在 `1_Q_Learning` 目錄內執行：
+Or from within the `1_Q_Learning` directory:
 
 ```bash
 cd 1_Q_Learning
 python Q_Learning.py
 ```
 
-## 演算法核心
+## Algorithm Core
 
-### Q-Learning 更新公式
+### Q-Learning Update Formula
 
-Q-Learning 使用 **時間差分 (Temporal-Difference, TD)** 方法來更新 Q-Table：
+Q-Learning uses **Temporal-Difference (TD)** methods to update the Q-Table:
 
 ```
 Q(S, A) ← Q(S, A) + α × [R + γ × max Q(S', a') - Q(S, A)]
@@ -73,47 +75,47 @@ Q(S, A) ← Q(S, A) + α × [R + γ × max Q(S', a') - Q(S, A)]
                                   TD Target
 ```
 
-**參數說明：**
-- **S**: 當前狀態
-- **A**: 執行的動作
-- **R**: 獲得的即時獎勵
-- **S'**: 新狀態
-- **α (alpha)**: 學習率 = `0.1` (控制對新資訊的信任程度)
-- **γ (gamma)**: 折扣因子 = `0.99` (控制對未來獎勵的重視程度)
+**Parameter Explanations:**
+- **S**: Current state
+- **A**: Action taken
+- **R**: Immediate reward received
+- **S'**: New state
+- **α (alpha)**: Learning rate = `0.1` (controls trust in new information)
+- **γ (gamma)**: Discount factor = `0.99` (controls importance of future rewards)
 
-### Epsilon-Greedy 策略
+### Epsilon-Greedy Strategy
 
-在訓練過程中，Agent 使用 **Epsilon-Greedy** 策略來平衡探索 (Exploration) 與利用 (Exploitation)：
+During training, the agent uses **Epsilon-Greedy** strategy to balance exploration and exploitation:
 
-- **探索** (機率 = ε)：隨機選擇動作
-- **利用** (機率 = 1-ε)：選擇 Q 值最高的動作
+- **Exploration** (probability = ε): Randomly select an action
+- **Exploitation** (probability = 1-ε): Select action with highest Q-value
 
-**Epsilon 衰退：**
-- **初始值 (EPSILON)**：`1.0` (100% 探索)
-- **最終值 (MIN_EPSILON)**：`0.01` (1% 探索)
-- **衰退回合數 (DECAY_EPISODES)**：`10000` 回合
+**Epsilon Decay:**
+- **Initial value (EPSILON)**: `1.0` (100% exploration)
+- **Final value (MIN_EPSILON)**: `0.01` (1% exploration)
+- **Decay episodes (DECAY_EPISODES)**: `10000` episodes
 
 ```python
 EPSILON = MAX_EPSILON - (MAX_EPSILON - MIN_EPSILON) × (episode / DECAY_EPISODES)
 ```
 
-## 超參數設定
+## Hyperparameters
 
-| 參數 | 值 | 說明 |
-|------|-----|------|
-| `ALPHA` | 0.1 | 學習率 |
-| `GAMMA` | 0.99 | 折扣因子 |
-| `NUM_EPISODES` | 20000 | 訓練回合數 |
-| `MAX_STEPS_PER_EPISODE` | 100 | 每回合最大步數 |
-| `EPSILON` (初始) | 1.0 | 探索率初始值 |
-| `MIN_EPSILON` | 0.01 | 探索率最小值 |
-| `DECAY_EPISODES` | 10000 | Epsilon 衰退的回合數 |
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| `ALPHA` | 0.1 | Learning rate |
+| `GAMMA` | 0.99 | Discount factor |
+| `NUM_EPISODES` | 20000 | Number of training episodes |
+| `MAX_STEPS_PER_EPISODE` | 100 | Maximum steps per episode |
+| `EPSILON` (initial) | 1.0 | Initial exploration rate |
+| `MIN_EPSILON` | 0.01 | Minimum exploration rate |
+| `DECAY_EPISODES` | 10000 | Episodes for epsilon decay |
 
-## 預期輸出
+## Expected Output
 
-### 訓練過程
+### Training Process
 
-程式會每 2000 回合輸出一次當前的 Epsilon 值：
+The program outputs the current epsilon value every 2000 episodes:
 
 ```
 Episode: 2000, Epsilon: 0.8200
@@ -126,78 +128,78 @@ Episode: 12000, Epsilon: 0.0100
 Training completed!
 ```
 
-### 學習到的策略
+### Learned Policy
 
-訓練完成後，程式會輸出學習到的最佳策略 (每個狀態下應該選擇的動作方向)：
+After training, the program outputs the learned optimal policy (the best action for each state):
 
 ```
---- 學習到的最佳策略 (Policy) ---
+--- Learned Optimal Policy ---
  ↓  →  →  ↓
  ↓  ↓  →  ↓
  →  →  →  ↓
  →  →  →  G
 ```
 
-**解讀：**
-- 每個箭頭代表該狀態下 Q 值最高的動作
-- `G` 代表目標狀態 (Goal)
-- 理想情況下，策略應該指引 Agent 從任何狀態都能到達目標
+**Interpretation:**
+- Each arrow represents the action with highest Q-value in that state
+- `G` represents the goal state
+- Ideally, the policy should guide the agent from any state to the goal
 
-### Q-Table 範例
+### Q-Table Example
 
-程式也會輸出最終的 Q-Table (16×4 的陣列)，每一行代表一個狀態，每一列代表該動作的 Q 值。
+The program also outputs the final Q-Table (16×4 array), where each row represents a state and each column represents the Q-value for that action.
 
-## 實作細節
+## Implementation Details
 
-### 核心函式
+### Core Functions
 
 1. **`step(state, action)`**
-   - 實作環境的狀態轉移邏輯
-   - 輸入：當前狀態和動作
-   - 輸出：`(新狀態, 獎勵, 是否完成)`
+   - Implements environment state transition logic
+   - Input: Current state and action
+   - Output: `(new state, reward, done)`
 
-2. **訓練迴圈**
-   - 外層迴圈：遍歷所有訓練回合
-   - 內層迴圈：每個回合中的步驟
-   - 在每一步執行：
-     1. 使用 Epsilon-Greedy 選擇動作
-     2. 執行動作並獲得回饋
-     3. 更新 Q-Table
-     4. 更新狀態
+2. **Training Loop**
+   - Outer loop: Iterate through all training episodes
+   - Inner loop: Steps within each episode
+   - At each step:
+     1. Use Epsilon-Greedy to select action
+     2. Execute action and receive feedback
+     3. Update Q-Table
+     4. Update state
 
-### 資料結構
+### Data Structure
 
-- **Q-Table**: `numpy.ndarray` (形狀: 16×4)
-  - 行索引：狀態編號 (0-15)
-  - 列索引：動作編號 (0-3)
-  - 值：Q(狀態, 動作)
+- **Q-Table**: `numpy.ndarray` (shape: 16×4)
+  - Row index: State number (0-15)
+  - Column index: Action number (0-3)
+  - Value: Q(state, action)
 
-## 學習重點
+## Key Learning Points
 
-這個實作展示了強化學習的核心概念：
+This implementation demonstrates core RL concepts:
 
-1. ✅ **Agent-Environment 互動迴圈**：狀態 → 動作 → 獎勵 → 新狀態
-2. ✅ **時間差分學習 (TD Learning)**：不需要等到回合結束就能更新價值
-3. ✅ **探索與利用的權衡 (Exploration vs. Exploitation)**：Epsilon-Greedy 策略
-4. ✅ **價值函數近似**：使用 Q-Table 儲存每個狀態-動作對的價值
-5. ✅ **策略改進**：從學習到的 Q 值中提取最佳策略
+1. ✅ **Agent-Environment Interaction Loop**: State → Action → Reward → New State
+2. ✅ **Temporal-Difference Learning (TD Learning)**: Update values without waiting for episode end
+3. ✅ **Exploration vs. Exploitation Trade-off**: Epsilon-Greedy strategy
+4. ✅ **Value Function Approximation**: Use Q-Table to store value for each state-action pair
+5. ✅ **Policy Improvement**: Extract optimal policy from learned Q-values
 
-## 限制與延伸
+## Limitations & Extensions
 
-### 表格型方法的限制
+### Limitations of Tabular Methods
 
-- **維度詛咒 (Curse of Dimensionality)**：狀態空間稍大就無法使用
-- **無法泛化**：每個狀態的學習是獨立的
-- **記憶體需求**：需要儲存所有狀態-動作對
+- **Curse of Dimensionality**: Cannot handle slightly larger state spaces
+- **No Generalization**: Learning for each state is independent
+- **Memory Requirements**: Must store all state-action pairs
 
-### 延伸閱讀
+### Further Reading
 
-要突破這些限制，可以學習：
-- **Deep Q-Network (DQN)**：使用神經網路取代 Q-Table → 參見 `2_Cart_Pole_DQN/`
-- **Policy Gradient 方法**：直接學習策略而非價值函數
-- **Actor-Critic 方法**：結合價值與策略 → 參見 `3_Pendulum/`
+To overcome these limitations, explore:
+- **Deep Q-Network (DQN)**: Use neural networks instead of Q-Table → See `2_Cart_Pole_DQN/`
+- **Policy Gradient Methods**: Learn policy directly instead of value function
+- **Actor-Critic Methods**: Combine value and policy → See `3_Pendulum/`
 
-## 參考資料
+## References
 
 - Sutton & Barto, "Reinforcement Learning: An Introduction" (Chapter 6: Temporal-Difference Learning)
 - Watkins, C.J.C.H. (1989). "Learning from Delayed Rewards" (Ph.D. thesis)

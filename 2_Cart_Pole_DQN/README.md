@@ -1,162 +1,164 @@
-# Deep Q-Network (DQN) 實作 - CartPole-v1
+# Deep Q-Network (DQN) Implementation - CartPole-v1
 
-## 概述
+> **中文版本**: [README_ch.md](README_ch.md)
 
-這是一個使用 **Deep Q-Network (DQN)** 演算法來解決 OpenAI Gymnasium 的 **CartPole-v1** 環境的實作。DQN 是第一個成功結合深度學習與強化學習的演算法，由 DeepMind 於 2015 年提出，能夠處理高維度狀態空間的問題。
+## Overview
 
-**核心突破：** DQN 使用**深度神經網路**作為函數近似器 (Function Approximator) 來取代傳統的 Q-Table，從而解決了表格型方法的「維度詛咒」問題。
+This is an implementation of the **Deep Q-Network (DQN)** algorithm solving OpenAI Gymnasium's **CartPole-v1** environment. DQN is the first algorithm to successfully combine deep learning with reinforcement learning, proposed by DeepMind in 2015, capable of handling high-dimensional state spaces.
 
-## 環境說明
+**Core Breakthrough:** DQN uses a **deep neural network** as a function approximator to replace traditional Q-Tables, solving the "curse of dimensionality" problem of tabular methods.
 
-### CartPole-v1 (倒立擺)
+## Environment Description
 
-CartPole 是經典的控制問題：一根桿子通過非驅動關節附著在小車上，目標是通過左右移動小車來保持桿子直立。
+### CartPole-v1 (Inverted Pendulum)
+
+CartPole is a classic control problem: a pole is attached through an unactuated joint to a cart. The goal is to move the cart left or right to keep the pole upright.
 
 ```
         |
-        |  ← 桿子 (Pole)
+        |  ← Pole
         |
     ┌───────┐
-    │ 小車  │ ← 可左右移動
+    │  Cart │ ← Can move left/right
     └───┬───┘
     ════════════
 ```
 
-### 環境參數
+### Environment Parameters
 
-- **狀態空間 (State Space)**：連續 4 維向量
-  - `position`: 小車位置 (範圍: -4.8 ~ 4.8)
-  - `velocity`: 小車速度
-  - `angle`: 桿子角度 (範圍: -0.418 ~ 0.418 弧度，約 ±24°)
-  - `angular_velocity`: 桿子角速度
+- **State Space**: Continuous 4-dimensional vector
+  - `position`: Cart position (range: -4.8 ~ 4.8)
+  - `velocity`: Cart velocity
+  - `angle`: Pole angle (range: -0.418 ~ 0.418 radians, approximately ±24°)
+  - `angular_velocity`: Pole angular velocity
 
-- **動作空間 (Action Space)**：離散 2 個動作
-  - `0`: 向左推小車
-  - `1`: 向右推小車
+- **Action Space**: Discrete 2 actions
+  - `0`: Push cart to the left
+  - `1`: Push cart to the right
 
-- **獎勵函數**：
-  - 每存活一個時間步獲得 `+1` 分
-  - 目標是盡可能長時間保持桿子直立
+- **Reward Function**:
+  - Receive `+1` reward for each timestep survived
+  - Goal is to keep pole upright as long as possible
 
-- **終止條件**：
-  - 桿子傾斜角度超過 ±12°
-  - 小車移出邊界
-  - 達到最大步數 (500 步)
+- **Termination Conditions**:
+  - Pole tilt angle exceeds ±12°
+  - Cart moves out of bounds
+  - Reaches maximum steps (500 steps)
 
-- **成功標準**：
-  - 連續 100 個回合的平均獎勵 ≥ 475
+- **Success Criteria**:
+  - Average reward over 100 consecutive episodes ≥ 475
 
-## 執行方式
+## How to Run
 
-### 前置條件
+### Prerequisites
 
-確保已啟動虛擬環境並安裝相依套件：
+Ensure you've activated the virtual environment and installed dependencies:
 
 ```bash
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 執行程式
+### Execute the Program
 
 ```bash
 python 2_Cart_Pole_DQN/cart_pole_dqn.py
 ```
 
-或者在 `2_Cart_Pole_DQN` 目錄內執行：
+Or from within the `2_Cart_Pole_DQN` directory:
 
 ```bash
 cd 2_Cart_Pole_DQN
 python cart_pole_dqn.py
 ```
 
-## 演算法核心
+## Algorithm Core
 
-### 為什麼需要 DQN？
+### Why Do We Need DQN?
 
-**Q-Learning 的問題：**
-- CartPole 的狀態空間是**連續**的 (例如：位置 = 1.234567...)
-- 無法為「無限」多個狀態建立 Q-Table
+**Q-Learning Problem:**
+- CartPole's state space is **continuous** (e.g., position = 1.234567...)
+- Cannot create a Q-Table for "infinitely" many states
 
-**DQN 的解決方案：**
-- 使用**神經網路** $Q_\theta(s, a)$ 來**估算** Q 值
-- 網路可以「泛化」：相似的狀態會產生相似的 Q 值
+**DQN Solution:**
+- Use a **neural network** Q<sub>θ</sub>(s, a) to **estimate** Q-values
+- Network can "generalize": similar states produce similar Q-values
 
-### DQN 的兩大穩定技術
+### DQN's Two Key Stabilization Techniques
 
-直接用神經網路訓練 Q-Learning 會非常不穩定。DQN 引入了兩項關鍵技術：
+Directly training Q-Learning with a neural network is very unstable. DQN introduces two key techniques:
 
-#### 1. 經驗回放 (Experience Replay)
+#### 1. Experience Replay
 
-**問題：** 神經網路訓練最怕「高度相關」的連續資料，會導致過度擬合 (Overfitting)。
+**Problem:** Neural network training hates "highly correlated" consecutive data, leading to overfitting.
 
-**解決方案：** 建立一個 **Replay Buffer** (記憶體緩衝區)
+**Solution:** Build a **Replay Buffer** (memory buffer)
 
 ```python
 class ReplayBuffer:
-    - 容量 (BUFFER_SIZE): 10,000 筆經驗
-    - 儲存格式: (state, action, reward, next_state, done)
-    - 訓練時隨機抽樣 BATCH_SIZE=64 筆不相關的經驗
+    - Capacity (BUFFER_SIZE): 10,000 experiences
+    - Storage format: (state, action, reward, next_state, done)
+    - Training: randomly sample BATCH_SIZE=64 uncorrelated experiences
 ```
 
-**好處：**
-- ✅ 打破資料的時間相關性
-- ✅ 重複利用過去的經驗 (資料效率高)
-- ✅ 訓練更穩定
+**Benefits:**
+- ✅ Breaks temporal correlation in data
+- ✅ Reuses past experiences (data efficient)
+- ✅ More stable training
 
-#### 2. 目標網路 (Target Network)
+#### 2. Target Network
 
-**問題：** 「移動的靶心」問題
+**Problem:** "Moving target" problem
 
-在傳統 Q-Learning 中，我們同時用**同一個網路**來計算「預測值」和「目標值」：
+In traditional Q-Learning, we use **the same network** to compute both "predicted value" and "target value":
 
 ```
 Loss = [R + γ × max Q(S', a') - Q(S, A)]²
          └──────┬──────┘   └───┬───┘
-              目標值        預測值
-           (都來自同一個網路)
+              Target       Prediction
+           (both from same network)
 ```
 
-這就像你在射擊一個**你自己控制**的靶心 → 永遠追不上！
+This is like shooting at a target **you control yourself** → you'll never catch up!
 
-**解決方案：** 使用**兩個**神經網路
+**Solution:** Use **two** neural networks
 
-1. **線上網路 (Online Network)** $Q_{\text{online}}$
-   - 負責：選擇動作、計算預測值
-   - 狀態：**每步都更新**
+1. **Online Network** Q<sub>online</sub>
+   - Role: Select actions, compute predicted values
+   - Status: **Updates every step**
 
-2. **目標網路 (Target Network)** $Q_{\text{target}}$
-   - 負責：計算 TD 目標值
-   - 狀態：**權重被凍結** (每 100 步才同步一次)
+2. **Target Network** Q<sub>target</sub>
+   - Role: Compute TD target values
+   - Status: **Weights frozen** (synchronizes every 100 steps)
 
 ```python
-# 計算 TD 目標 (使用 Target Network - 固定的靶心)
+# Compute TD Target (using Target Network - fixed target)
 q_next_target = self.target_network(next_states)
 td_target = rewards + GAMMA * jnp.max(q_next_target, axis=1)
 
-# 計算 Loss (使用 Online Network)
+# Compute Loss (using Online Network)
 q_current = self.online_network(states)
 loss = mean((q_current - td_target)²)
 ```
 
-**同步機制：**
+**Synchronization Mechanism:**
 ```python
-if total_steps % TARGET_UPDATE_FREQ == 0:  # 每 100 步
-    agent.update_target_network()  # 複製權重
+if total_steps % TARGET_UPDATE_FREQ == 0:  # Every 100 steps
+    agent.update_target_network()  # Copy weights
 ```
 
-## 網路架構
+## Network Architecture
 
-### QNetwork (函數近似器)
+### QNetwork (Function Approximator)
 
-使用 **Flax NNX** 框架實作的 3 層全連接神經網路 (MLP)：
+3-layer fully connected neural network (MLP) implemented using **Flax NNX**:
 
 ```
 Input (4)  →  FC (64)  →  ReLU  →  FC (64)  →  ReLU  →  FC (2)  →  Output
- 狀態向量      隱藏層1             隱藏層2              Q值 (左, 右)
+State vector   Hidden 1             Hidden 2            Q-values (left, right)
 ```
 
-**實作程式碼：**
+**Implementation Code:**
 ```python
 class QNetwork(nnx.Module):
     def __init__(self, in_features: int, out_features: int, *, rngs: nnx.Rngs):
@@ -167,90 +169,90 @@ class QNetwork(nnx.Module):
     def __call__(self, x: jax.Array) -> jax.Array:
         x = nnx.relu(self.fc1(x))
         x = nnx.relu(self.fc2(x))
-        return self.fc3(x)  # 輸出 Q 值 (Logits)
+        return self.fc3(x)  # Output Q-values (Logits)
 ```
 
-**輸入範例：**
+**Input Example:**
 ```python
 state = [0.02, 0.01, -0.03, 0.04]  # [position, velocity, angle, angular_velocity]
-q_values = network(state)  # 輸出: [Q(s, 左), Q(s, 右)] = [1.23, 2.45]
-action = argmax(q_values)  # 選擇 Q 值最高的動作 → 右 (1)
+q_values = network(state)  # Output: [Q(s, left), Q(s, right)] = [1.23, 2.45]
+action = argmax(q_values)  # Choose action with highest Q-value → right (1)
 ```
 
-## 超參數設定
+## Hyperparameters
 
-| 參數 | 值 | 說明 |
-|------|-----|------|
-| `STATE_DIM` | 4 | 狀態空間維度 |
-| `ACTION_DIM` | 2 | 動作空間維度 |
-| `BUFFER_SIZE` | 10,000 | Replay Buffer 容量 |
-| `BATCH_SIZE` | 64 | 訓練批次大小 |
-| `GAMMA` | 0.99 | 折扣因子 |
-| `LEARNING_RATE` | 0.001 | Adam 優化器學習率 |
-| `NUM_EPISODES` | 500 | 訓練回合數 |
-| `TARGET_UPDATE_FREQ` | 100 | 目標網路更新頻率 (步數) |
-| `EPSILON_START` | 1.0 | 初始探索率 |
-| `EPSILON_END` | 0.01 | 最終探索率 |
-| `EPSILON_DECAY` | 0.995 | Epsilon 衰退率 (每回合) |
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| `STATE_DIM` | 4 | State space dimension |
+| `ACTION_DIM` | 2 | Action space dimension |
+| `BUFFER_SIZE` | 10,000 | Replay Buffer capacity |
+| `BATCH_SIZE` | 64 | Training batch size |
+| `GAMMA` | 0.99 | Discount factor |
+| `LEARNING_RATE` | 0.001 | Adam optimizer learning rate |
+| `NUM_EPISODES` | 500 | Number of training episodes |
+| `TARGET_UPDATE_FREQ` | 100 | Target network update frequency (steps) |
+| `EPSILON_START` | 1.0 | Initial exploration rate |
+| `EPSILON_END` | 0.01 | Final exploration rate |
+| `EPSILON_DECAY` | 0.995 | Epsilon decay rate (per episode) |
 
-### Epsilon 衰退策略
+### Epsilon Decay Strategy
 
-使用**指數衰退 (Exponential Decay)**：
+Uses **Exponential Decay**:
 
 ```python
 epsilon = max(EPSILON_END, epsilon × EPSILON_DECAY)
 ```
 
-這與 Q-Learning 的**線性衰退**不同，能更快速地從「探索」轉向「利用」。
+This differs from Q-Learning's **linear decay**, enabling faster transition from "exploration" to "exploitation."
 
-## DQN Agent 核心流程
+## DQN Agent Core Workflow
 
-### 1. 初始化
+### 1. Initialization
 
 ```python
 agent = DQNAgent(STATE_DIM, ACTION_DIM, rng_key=rng_key)
 ```
 
-建立：
-- Online Network (可訓練)
-- Target Network (權重凍結)
-- Replay Buffer (經驗池)
+Creates:
+- Online Network (trainable)
+- Target Network (weights frozen)
+- Replay Buffer (experience pool)
 - Optimizer (Adam)
 
-### 2. 動作選擇 (Epsilon-Greedy)
+### 2. Action Selection (Epsilon-Greedy)
 
 ```python
 def select_action(self, state, rng_key):
     if random() <= epsilon:
-        return random_action()  # 探索
+        return random_action()  # Explore
     else:
         q_values = self.online_network(state)
-        return argmax(q_values)  # 利用
+        return argmax(q_values)  # Exploit
 ```
 
-### 3. 訓練步驟
+### 3. Training Step
 
 ```python
 def train_step(self):
-    # 1. 從 Replay Buffer 中抽樣
+    # 1. Sample from Replay Buffer
     states, actions, rewards, next_states, dones = self.buffer.sample(BATCH_SIZE)
 
-    # 2. 計算 TD 目標 (使用 Target Network)
+    # 2. Compute TD Target (using Target Network)
     q_next_target = self.target_network(next_states)
     td_target = rewards + GAMMA * max(q_next_target) * (1 - dones)
 
-    # 3. 定義 Loss 函數
+    # 3. Define Loss Function
     def loss_fn(model):
         q_current = model(states)
         q_current_action = q_current[actions]
         return mean((q_current_action - td_target)²)
 
-    # 4. 計算梯度並更新 Online Network
+    # 4. Compute Gradients and Update Online Network
     _, grads = nnx.value_and_grad(loss_fn)(self.online_network)
     self.optimizer.update(grads)
 ```
 
-### 4. 主訓練迴圈
+### 4. Main Training Loop
 
 ```python
 for episode in range(NUM_EPISODES):
@@ -258,138 +260,138 @@ for episode in range(NUM_EPISODES):
     episode_reward = 0
 
     while not done:
-        # (1) 選擇動作
+        # (1) Select action
         action = agent.select_action(state, rng_key)
 
-        # (2) 執行動作
+        # (2) Execute action
         next_state, reward, done, _, _ = env.step(action)
 
-        # (3) 儲存經驗到 Replay Buffer
+        # (3) Store experience in Replay Buffer
         agent.buffer.add(state, action, reward, next_state, done)
 
-        # (4) 訓練 Online Network
+        # (4) Train Online Network
         agent.train_step()
 
-        # (5) 定期更新 Target Network
+        # (5) Periodically update Target Network
         if total_steps % TARGET_UPDATE_FREQ == 0:
             agent.update_target_network()
 
         state = next_state
         episode_reward += reward
 
-    # (6) Epsilon 衰退
+    # (6) Epsilon decay
     agent.update_epsilon()
 ```
 
-## 預期輸出
+## Expected Output
 
-### 訓練過程
+### Training Process
 
-程式會每 50 個回合輸出一次訓練進度：
+The program outputs training progress every 50 episodes:
 
 ```
-開始訓練 DQN Agent...
+Starting DQN Agent training...
 Episode 50, Epsilon: 0.779, Avg Reward (last 50): 22.34
 Episode 100, Epsilon: 0.606, Avg Reward (last 50): 45.12
 Episode 150, Epsilon: 0.472, Avg Reward (last 50): 98.56
-...同步 Target Network 權重...
+...Synchronizing Target Network weights...
 Episode 200, Epsilon: 0.368, Avg Reward (last 50): 165.78
 Episode 250, Epsilon: 0.286, Avg Reward (last 50): 234.12
-...同步 Target Network 權重...
+...Synchronizing Target Network weights...
 Episode 300, Epsilon: 0.223, Avg Reward (last 50): 312.45
 Episode 350, Epsilon: 0.174, Avg Reward (last 50): 421.67
-Episode 400, Epsilon: 0.135, Avg Reward (last 50): 487.23  ← 成功！
-訓練完成！
+Episode 400, Epsilon: 0.135, Avg Reward (last 50): 487.23  ← Success!
+Training completed!
 ```
 
-**解讀：**
-- **Epsilon** 持續下降：從探索轉向利用
-- **Avg Reward** 逐漸上升：Agent 越來越聰明
-- **目標網路同步**：每隔一段時間會看到同步訊息
-- **成功標準**：平均獎勵 ≥ 475
+**Interpretation:**
+- **Epsilon** continuously decreases: transition from exploration to exploitation
+- **Avg Reward** gradually increases: agent gets smarter
+- **Target network sync**: synchronization messages appear periodically
+- **Success criteria**: average reward ≥ 475
 
-## Flax NNX 關鍵 API
+## Flax NNX Key APIs
 
-本實作使用 **Flax NNX** (新一代 API) 而非舊版的 `flax.linen`：
+This implementation uses **Flax NNX** (next-generation API) instead of legacy `flax.linen`:
 
-### 1. 模型定義
+### 1. Model Definition
 
 ```python
 class QNetwork(nnx.Module):
-    def __init__(self, ..., *, rngs: nnx.Rngs):  # 必須接收 rngs
+    def __init__(self, ..., *, rngs: nnx.Rngs):  # Must receive rngs
         self.fc1 = nnx.Linear(...)
 ```
 
-### 2. 優化器綁定
+### 2. Optimizer Binding
 
 ```python
 self.optimizer = nnx.Optimizer(self.online_network, optax.adam(LEARNING_RATE))
 ```
 
-### 3. 權重提取與更新 (Target Network 同步)
+### 3. Weight Extraction and Update (Target Network Sync)
 
 ```python
-# 提取 Online Network 的權重
+# Extract Online Network weights
 online_state = nnx.state(self.online_network)
 
-# 更新 Target Network 的權重
+# Update Target Network weights
 nnx.update(self.target_network, online_state)
 ```
 
-### 4. 梯度計算與更新
+### 4. Gradient Computation and Update
 
 ```python
-# 計算 Loss 和梯度
+# Compute loss and gradients
 _, grads = nnx.value_and_grad(loss_fn)(self.online_network)
 
-# 使用優化器更新參數
+# Update parameters using optimizer
 self.optimizer.update(grads)
 ```
 
-## Q-Learning vs DQN 對比
+## Q-Learning vs DQN Comparison
 
-| 特性 | Q-Learning (表格型) | DQN (深度學習) |
-|------|-------------------|---------------|
-| **Q 值儲存** | Q-Table (NumPy 陣列) | 神經網路 |
-| **狀態空間** | 小規模離散狀態 (16 個) | 高維度連續狀態 (無限) |
-| **記憶體需求** | O(狀態數 × 動作數) | O(網路參數數) |
-| **泛化能力** | ❌ 無 (每個狀態獨立) | ✅ 有 (相似狀態共享知識) |
-| **經驗回放** | ❌ 不使用 | ✅ Replay Buffer |
-| **目標網路** | ❌ 不需要 | ✅ Target Network |
-| **更新方式** | 直接更新 Q(s,a) | 梯度下降 |
-| **Epsilon 衰退** | 線性衰退 | 指數衰退 |
+| Feature | Q-Learning (Tabular) | DQN (Deep Learning) |
+|---------|---------------------|---------------------|
+| **Q-value Storage** | Q-Table (NumPy array) | Neural Network |
+| **State Space** | Small discrete states (16) | High-dim continuous states (infinite) |
+| **Memory Requirements** | O(states × actions) | O(network parameters) |
+| **Generalization** | ❌ None (each state independent) | ✅ Yes (similar states share knowledge) |
+| **Experience Replay** | ❌ Not used | ✅ Replay Buffer |
+| **Target Network** | ❌ Not needed | ✅ Target Network |
+| **Update Method** | Direct Q(s,a) update | Gradient descent |
+| **Epsilon Decay** | Linear decay | Exponential decay |
 
-## 進階技術與延伸
+## Advanced Techniques & Extensions
 
-本實作使用的是基礎 DQN。以下是後續的改進版本：
+This implementation uses basic DQN. Here are improved versions:
 
 1. **Double DQN** (DDQN)
-   - 解決 Q 值過估計問題
-   - 使用 Online Network 選擇動作，Target Network 評估價值
+   - Solves Q-value overestimation problem
+   - Uses Online Network to select action, Target Network to evaluate value
 
 2. **Dueling DQN**
-   - 網路分為兩個分支：V(s) 和 A(s,a)
-   - 更好的價值估計
+   - Network splits into two branches: V(s) and A(s,a)
+   - Better value estimation
 
 3. **Prioritized Experience Replay** (PER)
-   - 優先回放「重要」的經驗
-   - 加速學習
+   - Prioritizes "important" experiences for replay
+   - Accelerates learning
 
 4. **Rainbow DQN**
-   - 結合上述所有技術的最強版本
+   - Combines all the above techniques for strongest version
 
-## 從 DQN 到 Policy Gradient
+## From DQN to Policy Gradients
 
-**DQN 的局限：**
-- ❌ 無法處理**連續動作空間** (例如：方向盤角度 -180° ~ 180°)
-- ❌ 只能「間接」學習策略 (通過 Q 值)
+**DQN Limitations:**
+- ❌ Cannot handle **continuous action spaces** (e.g., steering angle -180° ~ 180°)
+- ❌ Only "indirectly" learns policy (through Q-values)
 
-**下一步：Policy Gradient 方法**
-- 參見 `3_Pendulum/` 的 PPO 實作
-- 直接學習策略 π(a|s)
-- 可處理連續動作
+**Next Step: Policy Gradient Methods**
+- See `3_Pendulum/` for PPO implementation
+- Directly learn policy π(a|s)
+- Can handle continuous actions
 
-## 參考資料
+## References
 
 - Mnih et al. (2015). "Human-level control through deep reinforcement learning" (Nature)
 - Mnih et al. (2013). "Playing Atari with Deep Reinforcement Learning" (NIPS Workshop)

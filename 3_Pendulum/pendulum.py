@@ -17,17 +17,15 @@ import gymnasium as gym
 # 為了讓 Actor 輸出 `sigma`，我們需要 TanhAF (雙曲正切)
 # 確保標準差 (sigma) 永遠是正數。
 from tensorflow_probability.substrates import jax as tfp
+
 tfd = tfp.distributions
+
 
 # --- 1. 定義「評論家 (Critic)」網路 ---
 #   它的工作：學習 V(s)
 class Critic(nnx.Module):
-    def __init__(
-            self,
-            in_features: int,
-            *,
-            rngs: nnx.Rngs
-        ) -> None:
+
+    def __init__(self, in_features: int, *, rngs: nnx.Rngs) -> None:
         """
         建立評論家網路 (Critic Network)
         Args:
@@ -36,7 +34,7 @@ class Critic(nnx.Module):
         """
         self.fc1 = nnx.Linear(in_features, 64, rngs=rngs)
         self.fc2 = nnx.Linear(64, 64, rngs=rngs)
-        self.fc_out = nnx.Linear(64, 1, rngs=rngs) # 輸出 1 個數字 (V 值)
+        self.fc_out = nnx.Linear(64, 1, rngs=rngs)  # 輸出 1 個數字 (V 值)
 
     def __call__(self, x: jax.Array) -> jax.Array:
         """
@@ -51,9 +49,11 @@ class Critic(nnx.Module):
         # 直接輸出 V(s) 的估計值
         return self.fc_out(x)
 
+
 # --- 2. 定義「演員 (Actor)」網路 ---
 #   它的工作：學習 π(a|s)
 class Actor(nnx.Module):
+
     def __init__(self, in_features: int, out_features: int, *, rngs: nnx.Rngs) -> None:
         """
         一個 MLP, 但有兩個「頭」(_mu 和 _sigma):
@@ -89,20 +89,22 @@ class Actor(nnx.Module):
 
         # 2. 計算標準差 (sigma)
         # sigma 必須是正數，所以我們用 softplus
-        sigma = nnx.softplus(self.fc_sigma(x)) + 1e-5 # (加 1e-5 避免為 0)
+        sigma = nnx.softplus(self.fc_sigma(x)) + 1e-5  # (加 1e-5 避免為 0)
 
         # 3. 回傳一個「機率分佈」
         # 我們不是回傳「動作」，而是回傳一個「常態分佈」物件
         return tfd.Normal(loc=mu, scale=sigma)
 
+
 class PPOAgent:
+
     def __init__(
-            self,
-            state_dim: int,
-            action_dim: int,
-            *,
-            rng_key: jax.Array,
-        ):
+        self,
+        state_dim: int,
+        action_dim: int,
+        *,
+        rng_key: jax.Array,
+    ):
         """
         建立 PPO Agent 的 Actor-Critic 網路和優化器
         Args:
@@ -117,17 +119,13 @@ class PPOAgent:
         self.actor = Actor(state_dim, action_dim, rngs=nnx.Rngs(actor_key))
 
         # PPO 通常使用較低的學習率
-        self.actor_optimizer = nnx.Optimizer(
-            self.actor,
-            optax.adam(learning_rate=3e-4)
-        )
+        self.actor_optimizer = nnx.Optimizer(self.actor, optax.adam(learning_rate=3e-4))
 
         # --- 2. 建立 Critic (評論家) 和它的優化器 ---
         self.critic = Critic(state_dim, rngs=nnx.Rngs(critic_key))
 
         self.critic_optimizer = nnx.Optimizer(
-            self.critic,
-            optax.adam(learning_rate=1e-3)
+            self.critic, optax.adam(learning_rate=1e-3)
         )
 
         # 我們還需要一個 RNG 密鑰流 (stream) 來處理採樣
@@ -151,7 +149,7 @@ class PPOAgent:
         value = jax.lax.stop_gradient(value)
 
         # 3. 採樣一個動作
-        rng_key = self.rng_stream.sampler() # 取得一個新密鑰
+        rng_key = self.rng_stream.sampler()  # 取得一個新密鑰
         action = action_dist.sample(seed=rng_key)
 
         # 4. 計算這個動作的「Log 機率」
@@ -166,25 +164,26 @@ class PPOAgent:
         return action, value, log_prob
 
     def train_step(
-            self,
-            batch_states: jax.Array,
-            batch_actions: jax.Array,
-            batch_log_probs_old: jax.Array,
-            batch_advantages: jax.Array,
-            batch_returns: jax.Array,
-            clip_epsilon: float, # 這就是超參數 EPSILON
-        ):
+        self,
+        batch_states: jax.Array,
+        batch_actions: jax.Array,
+        batch_log_probs_old: jax.Array,
+        batch_advantages: jax.Array,
+        batch_returns: jax.Array,
+        clip_epsilon: float,  # 這就是超參數 EPSILON
+    ):
         """
         這是在「學習 (Learn)」階段的核心。
         它會被反覆呼叫。
         """
+
         # --- 1. 訓練「評論家 (Critic)」 ---
         # Critic 的目標：讓 V(s) 盡可能接近「實際總分 (Returns)」
         def critic_loss_fn(critic_model: Critic):
             # (1) 取得「當前的 V 值預測」
             values_pred = critic_model(batch_states)
             # (2) 計算 V(s) 和「實際總分 (Returns)」之間的均方誤差 (MSE)
-            loss = jnp.mean((batch_returns - values_pred.flatten())**2)
+            loss = jnp.mean((batch_returns - values_pred.flatten()) ** 2)
             return loss
 
         # (3) 計算梯度並更新 Critic
@@ -210,11 +209,7 @@ class PPOAgent:
 
             # (4) PPO 核心：計算「裁剪後的 (Clipped)」Loss
             #     jnp.clip 會把 Ratio 限制在 [1 - ε, 1 + ε] 之間
-            ratio_clipped = jnp.clip(
-                ratio,
-                1.0 - clip_epsilon,
-                1.0 + clip_epsilon
-            )
+            ratio_clipped = jnp.clip(ratio, 1.0 - clip_epsilon, 1.0 + clip_epsilon)
             loss_clipped = batch_advantages * ratio_clipped
 
             # (5) 取「兩者中較小」的那個
@@ -235,6 +230,7 @@ class PPOAgent:
 # --- 3. 建立「Rollout 儲存區」 ---
 #   它的工作：儲存 N 步的 (s, a, r, log_prob, v_val, done)
 class RolloutBuffer:
+
     def __init__(self):
         """
         建立一個空的儲存區
@@ -284,18 +280,18 @@ class RolloutBuffer:
             jnp.asarray(self.actions, dtype=jnp.float32),
             jnp.asarray(self.log_probs, dtype=jnp.float32),
             jnp.asarray(self.advantages, dtype=jnp.float32),
-            jnp.asarray(self.returns, dtype=jnp.float32)
+            jnp.asarray(self.returns, dtype=jnp.float32),
         )
 
     def __len__(self):
         return len(self.states)
 
     def calculate_advantages_and_returns(
-            self,
-            last_value: np.ndarray,
-            gamma: float,
-            gae_lambda: float,
-        ):
+        self,
+        last_value: np.ndarray,
+        gamma: float,
+        gae_lambda: float,
+    ):
         """
         在 N 步收集完畢後，從「最後一步」反向計算 GAE 和 Returns。
 
@@ -328,7 +324,9 @@ class RolloutBuffer:
             # Advantage(t) = delta(t) + (γ * λ) * Advantage(t+1)
             # 這是一個遞迴：t 時刻的優勢 =
             #   (t 時刻的驚訝) + (折扣後的 *下一步的優勢*)
-            gae = delta + gamma * gae_lambda * (1.0 - done) * (self.advantages[t+1] if t+1 < len(self.rewards) else 0.0)
+            gae = delta + gamma * gae_lambda * (1.0 - done) * (
+                self.advantages[t + 1] if t + 1 < len(self.rewards) else 0.0
+            )
             self.advantages[t] = gae
 
             # --- 3. 計算 Returns (Critic 的學習目標) ---
@@ -344,8 +342,9 @@ class RolloutBuffer:
         # 我們讓 Advantage 的平均值為 0，標準差為 1
         # 這可以防止「獎勵訊號」忽大忽小
         adv_mean = np.mean(self.advantages)
-        adv_std = np.std(self.advantages) + 1e-8 # (加 1e-8 避免除以 0)
+        adv_std = np.std(self.advantages) + 1e-8  # (加 1e-8 避免除以 0)
         self.advantages = (self.advantages - adv_mean) / adv_std
+
 
 # --- 4. 主訓練迴圈 ---
 def main():
@@ -358,8 +357,8 @@ def main():
     env = gym.make("Pendulum-v1")
 
     # 取得狀態和動作的維度
-    STATE_DIM = env.observation_space.shape[0] # 3
-    ACTION_DIM = env.action_space.shape[0]     # 1
+    STATE_DIM = env.observation_space.shape[0]  # 3
+    ACTION_DIM = env.action_space.shape[0]  # 1
 
     # 初始化 Agent
     main_rng = jax.random.PRNGKey(42)
@@ -369,14 +368,14 @@ def main():
     buffer = RolloutBuffer()
 
     # --- B. 定義超參數 ---
-    NUM_TOTAL_TIMESTEPS = 100_000 # 總共要跑的步數
-    ROLLOUT_STEPS = 2048          # 每次「收集」的步數 (N)
-    TRAIN_EPOCHS = 10             # 每次「學習」要反覆訓練幾次
-    BATCH_SIZE = 64               # 每次訓練抓的小批次大小
+    NUM_TOTAL_TIMESTEPS = 100_000  # 總共要跑的步數
+    ROLLOUT_STEPS = 2048  # 每次「收集」的步數 (N)
+    TRAIN_EPOCHS = 10  # 每次「學習」要反覆訓練幾次
+    BATCH_SIZE = 64  # 每次訓練抓的小批次大小
 
-    GAMMA = 0.99                  # 折扣因子
-    GAE_LAMBDA = 0.95             # GAE 的平滑參數 (λ)
-    CLIP_EPSILON = 0.2            # PPO 的裁剪參數 (ε)
+    GAMMA = 0.99  # 折扣因子
+    GAE_LAMBDA = 0.95  # GAE 的平滑參數 (λ)
+    CLIP_EPSILON = 0.2  # PPO 的裁剪參數 (ε)
 
     # --- C. PPO 的「收集-學習」大迴圈 ---
     # 初始化環境
@@ -422,13 +421,9 @@ def main():
         print(f"...開始 {TRAIN_EPOCHS} 個 Epochs 的學習...")
 
         # 取得所有「準備好」的學習資料
-        (
-            all_states,
-            all_actions,
-            all_log_probs_old,
-            all_advantages,
-            all_returns
-        ) = buffer.get_data_for_learning()
+        (all_states, all_actions, all_log_probs_old, all_advantages, all_returns) = (
+            buffer.get_data_for_learning()
+        )
 
         # 我們要拿著這 2048 筆資料，反覆訓練 TRAIN_EPOCHS 次
         for _ in range(TRAIN_EPOCHS):
@@ -454,7 +449,7 @@ def main():
                     batch_log_probs_old,
                     batch_advantages,
                     batch_returns,
-                    CLIP_EPSILON
+                    CLIP_EPSILON,
                 )
 
         # --- 階段 4: 丟棄 (Discard) ---
@@ -466,6 +461,7 @@ def main():
 
     env.close()
     print("--- 訓練完成！ ---")
+
 
 # 執行主函式
 if __name__ == "__main__":

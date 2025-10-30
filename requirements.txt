@@ -1,14 +1,22 @@
 # Core numerical computing
-numpy>=1.24.0
+numpy>=1.24.0,<2.0.0
 
-# JAX ecosystem for deep learning
-jax>=0.4.20
-jaxlib>=0.4.20
-flax>=0.8.0
-optax>=0.1.9
+# JAX ecosystem for deep learning (pinned versions for compatibility)
+jax==0.4.35
+jaxlib==0.4.35
+flax==0.10.2
+optax==0.2.4
 
 # Reinforcement learning environments
-gymnasium>=0.29.0
+gymnasium==0.29.1
 
 # Probability distributions for continuous action spaces
-tensorflow-probability[jax]>=0.22.0
+tensorflow-probability[jax]==0.24.0
+
+# Datasets (pinned versions to avoid conflicts)
+tensorflow==2.18.0
+tf-keras==2.18.0
+tensorflow-datasets==4.9.6
+
+# Code formatting
+pyink

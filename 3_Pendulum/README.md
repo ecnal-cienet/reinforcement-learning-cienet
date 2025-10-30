@@ -1,412 +1,409 @@
-# Proximal Policy Optimization (PPO) 實作 - Pendulum-v1
+# Proximal Policy Optimization (PPO) Implementation - Pendulum-v1
 
-## 概述
+> **中文版本**: [README_ch.md](README_ch.md)
 
-這是一個使用 **Proximal Policy Optimization (PPO)** 演算法來解決 OpenAI Gymnasium 的 **Pendulum-v1** 環境的完整實作。PPO 是現代強化學習的核心演算法，被廣泛應用於機器人控制、遊戲 AI，以及**大型語言模型的對齊訓練 (RLHF)**。
+## Overview
 
-**核心突破：** PPO 結合了 **Actor-Critic 架構**、**連續動作空間處理**、以及**穩定的策略更新機制**，是目前工業界最受歡迎的 RL 演算法之一。
+This is a complete implementation of the **Proximal Policy Optimization (PPO)** algorithm solving OpenAI Gymnasium's **Pendulum-v1** environment. PPO is the core algorithm in modern reinforcement learning, widely applied in robot control, game AI, and **large language model alignment training (RLHF)**.
 
-**與前兩個專案的關係：**
-- `1_Q_Learning/`: 學習 Q 值 (價值為基礎) - 表格型
-- `2_Cart_Pole_DQN/`: 學習 Q 值 (價值為基礎) - 深度學習 + 離散動作
-- `3_Pendulum/` **(本專案)**: 學習策略 (策略為基礎) - 深度學習 + **連續動作**
+**Core Breakthrough:** PPO combines **Actor-Critic architecture**, **continuous action space handling**, and **stable policy update mechanisms**, making it one of the most popular RL algorithms in industry today.
 
-## 環境說明
+**Relationship to Previous Projects:**
+- `1_Q_Learning/`: Learn Q-values (value-based) - Tabular
+- `2_Cart_Pole_DQN/`: Learn Q-values (value-based) - Deep learning + discrete actions
+- `3_Pendulum/` **(This project)**: Learn policy (policy-based) - Deep learning + **continuous actions**
 
-### Pendulum-v1 (倒立擺)
+## Environment Description
 
-Pendulum 是一個經典的連續控制問題：一個擺錘從隨機位置開始，目標是施加適當的力矩 (Torque) 來讓擺錘保持在**正上方**的直立位置。
+### Pendulum-v1 (Inverted Pendulum)
+
+Pendulum is a classic continuous control problem: a pendulum starts from a random position, and the goal is to apply appropriate torque to keep the pendulum upright at the **top** position.
 
 ```
-    ↑ 目標位置
+    ↑ Target position
     |
     |
-    O ← 樞紐 (Pivot)
+    O ← Pivot
    /
-  /  ← 擺錘 (Pendulum)
+  /  ← Pendulum
  ●
 
-目標：施加力矩讓擺錘旋轉到正上方並保持穩定
+Goal: Apply torque to rotate pendulum to top and keep it stable
 ```
 
-### 環境參數
+### Environment Parameters
 
-- **狀態空間 (State Space)**：連續 3 維向量
-  - `cos(θ)`: 擺錘角度的餘弦值 (範圍: -1 ~ 1)
-  - `sin(θ)`: 擺錘角度的正弦值 (範圍: -1 ~ 1)
-  - `θ̇`: 擺錘的角速度 (範圍: -8 ~ 8 rad/s)
+- **State Space**: Continuous 3-dimensional vector
+  - `cos(θ)`: Cosine of pendulum angle (range: -1 ~ 1)
+  - `sin(θ)`: Sine of pendulum angle (range: -1 ~ 1)
+  - `θ̇`: Angular velocity of pendulum (range: -8 ~ 8 rad/s)
 
-  > **為什麼使用 cos/sin 而非角度？** 因為角度有週期性 (0° = 360°)，使用 cos/sin 可以讓狀態空間更平滑。
+  > **Why use cos/sin instead of angle?** Because angles have periodicity (0° = 360°), using cos/sin makes the state space smoother.
 
-- **動作空間 (Action Space)**：**連續** 1 維向量
-  - `torque`: 施加的力矩 (範圍: **-2 ~ 2**)
-  - ⚠️ **關鍵差異**：這是**連續動作**，不像 CartPole 只有「左/右」兩個離散選擇
+- **Action Space**: **Continuous** 1-dimensional vector
+  - `torque`: Applied torque (range: **-2 ~ 2**)
+  - ⚠️ **Key Difference**: This is **continuous action**, unlike CartPole's discrete "left/right" choices
 
-- **獎勵函數**：
+- **Reward Function**:
   ```
   reward = -(θ² + 0.1 × θ̇² + 0.001 × torque²)
   ```
-  - 懲罰擺錘偏離直立位置 (θ²)
-  - 懲罰過大的角速度 (θ̇²)
-  - 懲罰過大的力矩 (torque²，鼓勵節能)
-  - **範圍**：約 -16.3 (最差) ~ 0 (完美)
+  - Penalizes deviation from upright position (θ²)
+  - Penalizes excessive angular velocity (θ̇²)
+  - Penalizes excessive torque (torque², encourages energy efficiency)
+  - **Range**: approximately -16.3 (worst) ~ 0 (perfect)
 
-- **終止條件**：
-  - 沒有提前終止條件
-  - 每個回合固定 200 步
+- **Termination Conditions**:
+  - No early termination
+  - Each episode has fixed 200 steps
 
-- **成功標準**：
-  - 平均獎勵 > -200 表示基本成功
-  - 平均獎勵 > -150 表示良好控制
+- **Success Criteria**:
+  - Average reward > -200 indicates basic success
+  - Average reward > -150 indicates good control
 
-## 執行方式
+## How to Run
 
-### 前置條件
+### Prerequisites
 
-確保已啟動虛擬環境並安裝相依套件：
+Ensure you've activated the virtual environment and installed dependencies:
 
 ```bash
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-**特別注意：** 本專案需要 `tensorflow-probability` 來處理連續動作的機率分佈。
+**Note:** This project requires `tensorflow-probability` to handle continuous action probability distributions.
 
-### 執行程式
+### Execute the Program
 
 ```bash
 python 3_Pendulum/pendulum.py
 ```
 
-或者在 `3_Pendulum` 目錄內執行：
+Or from within the `3_Pendulum` directory:
 
 ```bash
 cd 3_Pendulum
 python pendulum.py
 ```
 
-## 演算法核心
+## Algorithm Core
 
-### 從 DQN 到 PPO 的演進
+### Evolution from DQN to PPO
 
-#### DQN 的兩大局限
+#### Two Major Limitations of DQN
 
-1. **無法處理連續動作空間**
-   - DQN 依賴 `argmax` 操作：`action = argmax Q(s, a)`
-   - 在 Pendulum 中，動作是 **-2.0 到 2.0 之間的任意實數**
-   - 你無法對「無限多個」動作取 `max`
+1. **Cannot Handle Continuous Action Spaces**
+   - DQN relies on `argmax` operation: `action = argmax Q(s, a)`
+   - In Pendulum, actions are **any real number between -2.0 and 2.0**
+   - You cannot take `max` over "infinitely many" actions
 
-2. **只能間接學習策略**
-   - DQN 學習的是「Q 值」，策略 π 是從 Q 值「推導」出來的
-   - 我們真正想要的是「**策略 (Policy) 本身**」
+2. **Can Only Learn Policy Indirectly**
+   - DQN learns "Q-values", and policy π is "derived" from Q-values
+   - What we really want is the "**policy itself**"
 
-#### PPO 的解決方案
+#### PPO's Solution
 
-**核心思想：** 直接學習一個「**策略網路 (Policy Network)**」，用 π_θ(a|s) 表示。
+**Core Idea:** Directly learn a "**Policy Network**", denoted π<sub>θ</sub>(a|s).
 
-- **輸入**：狀態 s
-- **輸出**：動作的**機率分佈** (而非單一動作)
-  - **離散動作 (CartPole)**：`[P(左), P(右)]` = `[0.3, 0.7]`
-  - **連續動作 (Pendulum)**：一個**常態分佈** `N(μ, σ²)`
-    - `μ` (平均值)：最可能的動作
-    - `σ` (標準差)：探索的程度
+- **Input**: State s
+- **Output**: **Probability distribution** of actions (not a single action)
+  - **Discrete actions (CartPole)**: `[P(left), P(right)]` = `[0.3, 0.7]`
+  - **Continuous actions (Pendulum)**: A **Normal distribution** `N(μ, σ²)`
+    - `μ` (mean): Most likely action
+    - `σ` (standard deviation): Degree of exploration
 
-**範例：**
+**Example:**
 ```python
 state = [cos(θ), sin(θ), θ̇] = [0.8, 0.6, 1.2]
 distribution = actor(state)  # → N(μ=1.5, σ=0.3)
-action = distribution.sample()  # 從分佈中採樣 → 可能得到 1.7
+action = distribution.sample()  # Sample from distribution → might get 1.7
 ```
 
-### Actor-Critic 架構
+### Actor-Critic Architecture
 
-PPO 使用**兩個**神經網路來協同工作：
+PPO uses **two** neural networks working together:
 
-#### 1. 演員 (Actor) - 策略網路 π_θ
+#### 1. Actor - Policy Network π<sub>θ</sub>
 
-**工作：** 決策者 (做動作)
+**Job:** Decision maker (outputs actions)
 
-**網路結構：** 雙頭 MLP
+**Network Structure:** Dual-head MLP
 ```
 Input (3)  →  FC(64) → ReLU → FC(64) → ReLU → ┬→ FC_mu(1)    → tanh × 2 → μ
                                                  └→ FC_sigma(1) → softplus → σ
 ```
 
-**關鍵設計：**
-1. **μ 頭 (平均值)**：
-   - 使用 `tanh` 將輸出壓縮到 [-1, 1]
-   - 再乘以 2 → 範圍變為 [-2, 2] (符合環境要求)
+**Key Design:**
+1. **μ head (mean)**:
+   - Use `tanh` to compress output to [-1, 1]
+   - Multiply by 2 → range becomes [-2, 2] (matches environment requirements)
 
-2. **σ 頭 (標準差)**：
-   - 使用 `softplus` 確保 σ > 0 (標準差必須是正數)
-   - 加上 1e-5 避免數值不穩定
+2. **σ head (standard deviation)**:
+   - Use `softplus` to ensure σ > 0 (standard deviation must be positive)
+   - Add 1e-5 to avoid numerical instability
 
-**輸出：** `tfp.distributions.Normal(loc=μ, scale=σ)`
+**Output:** `tfp.distributions.Normal(loc=μ, scale=σ)`
 
-**程式碼：**
+**Code:**
 ```python
 class Actor(nnx.Module):
     def __call__(self, x: jax.Array) -> tfd.Normal:
         x = nnx.relu(self.fc1(x))
         x = nnx.relu(self.fc2(x))
 
-        mu = jnp.tanh(self.fc_mu(x)) * 2.0      # 平均值 [-2, 2]
-        sigma = nnx.softplus(self.fc_sigma(x)) + 1e-5  # 標準差 > 0
+        mu = jnp.tanh(self.fc_mu(x)) * 2.0      # Mean [-2, 2]
+        sigma = nnx.softplus(self.fc_sigma(x)) + 1e-5  # Std > 0
 
-        return tfd.Normal(loc=mu, scale=sigma)   # 回傳機率分佈
+        return tfd.Normal(loc=mu, scale=sigma)   # Return probability distribution
 ```
 
-#### 2. 評論家 (Critic) - 價值網路 V_φ
+#### 2. Critic - Value Network V<sub>φ</sub>
 
-**工作：** 評分者 (提供基線)
+**Job:** Evaluator (provides baseline)
 
-**網路結構：** 標準 MLP
+**Network Structure:** Standard MLP
 ```
 Input (3)  →  FC(64) → ReLU → FC(64) → ReLU → FC_out(1) → V(s)
 ```
 
-**輸出：** 一個數字，代表「在狀態 s，我預期能獲得的總獎勵」
+**Output:** A single number representing "in state s, expected total reward I can get"
 
-**程式碼：**
+**Code:**
 ```python
 class Critic(nnx.Module):
     def __call__(self, x: jax.Array) -> jax.Array:
         x = nnx.relu(self.fc1(x))
         x = nnx.relu(self.fc2(x))
-        return self.fc_out(x)  # 輸出 V(s)
+        return self.fc_out(x)  # Output V(s)
 ```
 
-### PPO 的三大核心技術
+### PPO's Three Core Techniques
 
-#### 技術 1：Advantage (優勢函數)
+#### Technique 1: Advantage (Advantage Function)
 
-**問題：** REINFORCE 使用「絕對總分」作為學習訊號 → 雜訊太高
+**Problem:** REINFORCE uses "absolute total score" as learning signal → too noisy
 
-**解決方案：** 使用「相對分數」
+**Solution:** Use "relative score"
 
 ```
-Advantage(s, a) = 實際拿到的分數 - Critic 預期的分數
+Advantage(s, a) = Actual score received - Critic's expected score
 A(s, a) = Q(s, a) - V(s)
 ```
 
-**訊號解讀：**
-- `A > 0`：表現**比預期好** → 增加這個動作的機率 ✅
-- `A < 0`：表現**比預期差** → 降低這個動作的機率 ❌
-- `A ≈ 0`：表現**符合預期** → 不改變
+**Signal Interpretation:**
+- `A > 0`: Performance **better than expected** → increase this action's probability ✅
+- `A < 0`: Performance **worse than expected** → decrease this action's probability ❌
+- `A ≈ 0`: Performance **as expected** → no change
 
-#### 技術 2：GAE (Generalized Advantage Estimation)
+#### Technique 2: GAE (Generalized Advantage Estimation)
 
-**問題：** 如何準確計算 Advantage？
+**Problem:** How to accurately compute Advantage?
 
-**方案：** 使用 GAE，這是一種「平滑」的 Advantage 計算方法
+**Solution:** Use GAE, a "smooth" Advantage calculation method
 
-**GAE 公式 (從後往前遞迴)：**
+**GAE Formula (iterate backwards recursively):**
 ```python
 for t in reversed(range(N)):
-    # 1. 計算 TD 誤差
+    # 1. Compute TD error
     delta_t = reward_t + γ × V(s_{t+1}) - V(s_t)
 
-    # 2. 計算 GAE (遞迴)
+    # 2. Compute GAE (recursive)
     A_t = delta_t + γ × λ × A_{t+1}
 
-    # 3. 計算 Return (Critic 的學習目標)
+    # 3. Compute Return (Critic's learning target)
     Return_t = A_t + V(s_t)
 ```
 
-**超參數：**
-- `γ` (GAMMA = 0.99)：折扣因子 (對未來獎勵的重視程度)
-- `λ` (GAE_LAMBDA = 0.95)：GAE 的平滑參數
-  - `λ = 0`：只看一步 (低變異數，高偏差)
-  - `λ = 1`：看到底 (高變異數，低偏差)
-  - `λ = 0.95`：折衷方案 ⭐
+**Hyperparameters:**
+- `γ` (GAMMA = 0.99): Discount factor (importance of future rewards)
+- `λ` (GAE_LAMBDA = 0.95): GAE smoothing parameter
+  - `λ = 0`: Only look one step ahead (low variance, high bias)
+  - `λ = 1`: Look to the end (high variance, low bias)
+  - `λ = 0.95`: Compromise ⭐
 
-**最終優化：Advantage 標準化**
+**Final Optimization: Advantage Normalization**
 ```python
 advantages = (advantages - mean) / (std + 1e-8)
 ```
-讓 Advantage 的平均值為 0，標準差為 1 → 訓練更穩定
+Makes Advantage have mean 0, standard deviation 1 → more stable training
 
-#### 技術 3：PPO-Clip (限制更新步伐)
+#### Technique 3: PPO-Clip (Limit Update Steps)
 
-**問題：** Actor-Critic 訓練不穩定，可能「一步走太大」導致策略崩潰
+**Problem:** Actor-Critic training is unstable, may "step too far" causing policy collapse
 
-**解決方案：** PPO-Clip 增加「安全鎖」
+**Solution:** PPO-Clip adds "safety lock"
 
-**核心概念：策略比例 (Policy Ratio)**
+**Core Concept: Policy Ratio**
 ```
 Ratio = π_new(a|s) / π_old(a|s)
 ```
-- `Ratio ≈ 1`：新舊策略相似 (安全)
-- `Ratio >> 1` 或 `Ratio << 1`：新舊策略差異太大 (危險)
+- `Ratio ≈ 1`: New and old policies similar (safe)
+- `Ratio >> 1` or `Ratio << 1`: New and old policies too different (dangerous)
 
-**PPO-Clip Loss 函數：**
+**PPO-Clip Loss Function:**
 ```python
-# 計算兩種 Loss
+# Compute two types of Loss
 loss_unclipped = Advantage × Ratio
 loss_clipped = Advantage × clip(Ratio, 1-ε, 1+ε)
 
-# 取較小值 (悲觀原則)
+# Take smaller value (pessimistic principle)
 loss = -mean(minimum(loss_unclipped, loss_clipped))
 ```
 
-**CLIP_EPSILON = 0.2 的含義：**
-- Ratio 被限制在 [0.8, 1.2] 範圍內
-- 即使 Advantage 很大，策略也**不能**一次更新超過 20%
-- 確保訓練穩定
+**CLIP_EPSILON = 0.2 Meaning:**
+- Ratio is limited to [0.8, 1.2] range
+- Even if Advantage is large, policy **cannot** update by more than 20% at once
+- Ensures stable training
 
-**視覺化：**
+**Visualization:**
 ```
-Advantage > 0 (好動作)
+Advantage > 0 (good action)
 ┌────────────────────────────┐
-│  允許增加機率，但不超過 20%  │  ← Clip 上限 (1.2)
+│  Allow increase prob, max 20%  │  ← Clip upper limit (1.2)
 ├────────────────────────────┤
-│  正常更新區間 [0.8, 1.2]    │
+│  Normal update range [0.8, 1.2]    │
 ├────────────────────────────┤
-│  允許減少機率，但不超過 20%  │  ← Clip 下限 (0.8)
+│  Allow decrease prob, max 20%  │  ← Clip lower limit (0.8)
 └────────────────────────────┘
 
-Advantage < 0 (壞動作) - 反過來
+Advantage < 0 (bad action) - reverse
 ```
 
-## PPO 訓練流程
+## PPO Training Workflow
 
 ### On-Policy vs Off-Policy
 
-| 特性 | Off-Policy (DQN) | On-Policy (PPO) |
-|------|-----------------|----------------|
-| **資料來源** | 任何舊策略 | 必須是**當前**策略 |
-| **經驗回放** | ✅ Replay Buffer (可重複使用) | ❌ Rollout Buffer (用完即丟) |
-| **訓練穩定性** | 較難 (需要 Target Network) | 較易 (策略更新更平滑) |
-| **樣本效率** | 高 (一筆資料用多次) | 低 (一筆資料只用一次) |
+| Feature | Off-Policy (DQN) | On-Policy (PPO) |
+|---------|-----------------|-----------------|
+| **Data Source** | Any old policy | Must be **current** policy |
+| **Experience Replay** | ✅ Replay Buffer (reusable) | ❌ Rollout Buffer (use once, discard) |
+| **Training Stability** | Harder (needs Target Network) | Easier (smoother policy updates) |
+| **Sample Efficiency** | High (reuse data multiple times) | Low (use data once) |
 
-**為什麼 PPO 是 On-Policy？**
-- PPO 的 Loss 計算需要「舊策略的 log 機率」
-- 如果資料來自「太舊」的策略，Ratio 會失真
-- 因此，PPO 必須在**收集完資料後立刻學習，然後丟棄**
+**Why is PPO On-Policy?**
+- PPO's Loss calculation needs "old policy's log probability"
+- If data comes from "too old" policy, Ratio will be distorted
+- Therefore, PPO must **immediately learn after collecting data, then discard**
 
-### RolloutBuffer (On-Policy 儲存區)
+### RolloutBuffer (On-Policy Storage)
 
 ```python
 class RolloutBuffer:
     def add(self, state, action, reward, log_prob, value, done):
-        # 儲存一步的經驗
+        # Store one step's experience
 
     def calculate_advantages_and_returns(self, last_value, gamma, gae_lambda):
-        # 計算 GAE 和 Returns (從後往前)
+        # Compute GAE and Returns (iterate backwards)
 
     def get_data_for_learning(self):
-        # 轉換為 JAX 陣列供訓練使用
+        # Convert to JAX arrays for training
 
     def clear(self):
-        # 學習完畢後，清空所有資料
+        # After learning, clear all data
 ```
 
-### PPO 四階段生命週期
+### PPO Four-Phase Lifecycle
 
 ```python
 while total_steps < MAX_STEPS:
-    # ========== 階段 1: 收集 (Rollout) ==========
-    for _ in range(ROLLOUT_STEPS):  # 例如 2048 步
-        # 1. 選擇動作
+    # ========== Phase 1: Collect (Rollout) ==========
+    for _ in range(ROLLOUT_STEPS):  # e.g., 2048 steps
+        # 1. Select action
         action, value, log_prob = agent.select_action(state)
 
-        # 2. 與環境互動
+        # 2. Interact with environment
         next_state, reward, done, _, _ = env.step(action)
 
-        # 3. 儲存到 Buffer
+        # 3. Store in Buffer
         buffer.add(state, action, reward, log_prob, value, done)
 
         state = next_state
 
-    # ========== 階段 2: 計算學習目標 (GAE) ==========
-    # 取得「最後一步」的 V 值
+    # ========== Phase 2: Compute Learning Targets (GAE) ==========
+    # Get "last step" V value
     last_value = critic(state)
 
-    # 計算所有步驟的 Advantages 和 Returns
+    # Compute Advantages and Returns for all steps
     buffer.calculate_advantages_and_returns(last_value, GAMMA, GAE_LAMBDA)
 
-    # ========== 階段 3: 學習 (Learn) ==========
-    # 取得所有資料
+    # ========== Phase 3: Learn ==========
+    # Get all data
     states, actions, log_probs_old, advantages, returns = buffer.get_data_for_learning()
 
-    # 反覆訓練 K 次 (TRAIN_EPOCHS = 10)
+    # Train K times (TRAIN_EPOCHS = 10)
     for epoch in range(TRAIN_EPOCHS):
-        # 打亂資料
+        # Shuffle data
         indices = random.permutation(ROLLOUT_STEPS)
 
-        # 分批訓練 (BATCH_SIZE = 64)
+        # Train in batches (BATCH_SIZE = 64)
         for batch_indices in batches(indices, BATCH_SIZE):
-            # 訓練 Critic (最小化 MSE)
+            # Train Critic (minimize MSE)
             train_critic(batch_states, batch_returns)
 
-            # 訓練 Actor (PPO-Clip Loss)
+            # Train Actor (PPO-Clip Loss)
             train_actor(batch_states, batch_actions,
                        batch_log_probs_old, batch_advantages)
 
-    # ========== 階段 4: 丟棄 (Discard) ==========
-    buffer.clear()  # 清空所有「舊策略」的資料
+    # ========== Phase 4: Discard ==========
+    buffer.clear()  # Clear all "old policy" data
 ```
 
-## 超參數設定
+## Hyperparameters
 
-| 參數 | 值 | 說明 |
-|------|-----|------|
-| `STATE_DIM` | 3 | 狀態空間維度 (cos θ, sin θ, θ̇) |
-| `ACTION_DIM` | 1 | 動作空間維度 (torque) |
-| `NUM_TOTAL_TIMESTEPS` | 100,000 | 總訓練步數 |
-| `ROLLOUT_STEPS` | 2,048 | 每次收集的步數 (N) |
-| `TRAIN_EPOCHS` | 10 | 每批資料訓練的輪數 (K) |
-| `BATCH_SIZE` | 64 | Mini-batch 大小 |
-| `GAMMA` | 0.99 | 折扣因子 (γ) |
-| `GAE_LAMBDA` | 0.95 | GAE 平滑參數 (λ) |
-| `CLIP_EPSILON` | 0.2 | PPO 裁剪參數 (ε) |
-| `ACTOR_LR` | 3e-4 | Actor 學習率 |
-| `CRITIC_LR` | 1e-3 | Critic 學習率 |
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| `STATE_DIM` | 3 | State space dimension (cos θ, sin θ, θ̇) |
+| `ACTION_DIM` | 1 | Action space dimension (torque) |
+| `NUM_TOTAL_TIMESTEPS` | 100,000 | Total training steps |
+| `ROLLOUT_STEPS` | 2,048 | Steps collected each time (N) |
+| `TRAIN_EPOCHS` | 10 | Training epochs per batch (K) |
+| `BATCH_SIZE` | 64 | Mini-batch size |
+| `GAMMA` | 0.99 | Discount factor (γ) |
+| `GAE_LAMBDA` | 0.95 | GAE smoothing parameter (λ) |
+| `CLIP_EPSILON` | 0.2 | PPO clipping parameter (ε) |
+| `ACTOR_LR` | 3e-4 | Actor learning rate |
+| `CRITIC_LR` | 1e-3 | Critic learning rate |
 
-**學習率選擇：**
-- Critic 的學習率 (1e-3) 比 Actor (3e-4) 高
-- 原因：Critic 需要快速學會評估狀態，為 Actor 提供準確的基線
+**Learning Rate Choice:**
+- Critic's learning rate (1e-3) is higher than Actor's (3e-4)
+- Reason: Critic needs to quickly learn to evaluate states, providing accurate baseline for Actor
 
-## 預期輸出
+## Expected Output
 
-### 訓練過程
+### Training Process
 
 ```
-開始 PPO 訓練...
+Starting PPO training...
 
---- 正在收集 2048 步的資料 ---
-...正在計算 GAE (Advantages) 和 Returns...
-...開始 10 個 Epochs 的學習...
-目前總步數: 2048/100000
+--- Collecting 2048 steps of data ---
+...Calculating GAE (Advantages) and Returns...
+...Starting 10 Epochs of learning...
+Current total steps: 2048/100000
 
---- 正在收集 2048 步的資料 ---
-...正在計算 GAE (Advantages) 和 Returns...
-...開始 10 個 Epochs 的學習...
-目前總步數: 4096/100000
-
---- 正在收集 2048 步的資料 ---
-...正在計算 GAE (Advantages) 和 Returns...
-...開始 10 個 Epochs 的學習...
-目前總步數: 6144/100000
+--- Collecting 2048 steps of data ---
+...Calculating GAE (Advantages) and Returns...
+...Starting 10 Epochs of learning...
+Current total steps: 4096/100000
 
 ...
 
-目前總步數: 100000/100000
---- 訓練完成！ ---
+Current total steps: 100000/100000
+--- Training completed! ---
 ```
 
-**解讀：**
-- 每次收集 2048 步
-- 計算 GAE
-- 訓練 10 個 Epochs (每個 Epoch 使用所有 2048 筆資料，分成多個 batch)
-- 丟棄資料並開始下一輪
+**Interpretation:**
+- Collect 2048 steps each time
+- Compute GAE
+- Train for 10 Epochs (each Epoch uses all 2048 data points, split into multiple batches)
+- Discard data and start next round
 
-### 評估訓練效果
+### Evaluating Training Results
 
-訓練完成後，可以手動評估 Agent 的表現：
+After training, manually evaluate the agent's performance:
 
 ```python
-# 在 main() 函數最後添加
+# Add at end of main() function
 env = gym.make("Pendulum-v1", render_mode="human")
 state, _ = env.reset()
 
@@ -417,186 +414,186 @@ for _ in range(1000):
         state, _ = env.reset()
 ```
 
-**成功的標誌：**
-- 擺錘能快速旋轉到正上方
-- 在正上方保持穩定 (小幅震盪)
-- 平均獎勵 > -200
+**Success Indicators:**
+- Pendulum can quickly rotate to top
+- Stay stable at top (small oscillations)
+- Average reward > -200
 
-## 核心程式碼解析
+## Core Code Analysis
 
-### 1. Actor 的 select_action (JAX ↔ NumPy 橋樑)
+### 1. Actor's select_action (JAX ↔ NumPy Bridge)
 
 ```python
 def select_action(self, state: np.ndarray):
-    # NumPy → JAX (增加 batch 維度)
+    # NumPy → JAX (add batch dimension)
     state_jnp = jnp.asarray(state[np.newaxis, :], dtype=jnp.float32)
 
-    # 呼叫 Actor → 取得機率分佈
+    # Call Actor → get probability distribution
     action_dist = self.actor(state_jnp)  # N(μ, σ)
 
-    # 呼叫 Critic → 取得基線
+    # Call Critic → get baseline
     value = self.critic(state_jnp)  # V(s)
-    value = jax.lax.stop_gradient(value)  # 阻止梯度回傳
+    value = jax.lax.stop_gradient(value)  # Stop gradient backprop
 
-    # 從分佈中採樣動作
+    # Sample action from distribution
     action = action_dist.sample(seed=rng_key)
 
-    # 計算 log 機率 (PPO 必須)
+    # Compute log probability (PPO must have)
     log_prob = action_dist.log_prob(action)
 
-    # JAX → NumPy (移除 batch 維度)
+    # JAX → NumPy (remove batch dimension)
     return action.flatten(), value.flatten(), log_prob.flatten()
 ```
 
-**為什麼需要 log_prob？**
-- PPO 需要計算 `Ratio = exp(log_prob_new - log_prob_old)`
-- 必須在「採樣當下」記錄 log_prob_old
+**Why do we need log_prob?**
+- PPO needs to compute `Ratio = exp(log_prob_new - log_prob_old)`
+- Must record log_prob_old at "sampling time"
 
-### 2. Critic 訓練 (MSE Loss)
+### 2. Critic Training (MSE Loss)
 
 ```python
 def critic_loss_fn(critic_model: Critic):
-    values_pred = critic_model(batch_states)  # 預測的 V(s)
+    values_pred = critic_model(batch_states)  # Predicted V(s)
     loss = jnp.mean((batch_returns - values_pred.flatten()) ** 2)
     return loss
 
-# 計算梯度並更新
+# Compute gradients and update
 _, critic_grads = nnx.value_and_grad(critic_loss_fn)(self.critic)
 self.critic_optimizer.update(critic_grads)
 ```
 
-**目標：** 讓 V(s) 盡可能接近「實際總分」(Returns)
+**Goal:** Make V(s) as close to "actual total score" (Returns) as possible
 
-### 3. Actor 訓練 (PPO-Clip Loss)
+### 3. Actor Training (PPO-Clip Loss)
 
 ```python
 def actor_loss_fn(actor_model: Actor):
-    # 1. 取得新的 log 機率
+    # 1. Get new log probabilities
     action_dist_new = actor_model(batch_states)
     log_probs_new = action_dist_new.log_prob(batch_actions)
 
-    # 2. 計算 Ratio
+    # 2. Compute Ratio
     ratio = jnp.exp(log_probs_new - batch_log_probs_old)
 
-    # 3. 計算未裁剪的 Loss
+    # 3. Compute Unclipped Loss
     loss_unclipped = batch_advantages * ratio
 
-    # 4. 計算裁剪的 Loss
+    # 4. Compute Clipped Loss
     ratio_clipped = jnp.clip(ratio, 1.0 - CLIP_EPSILON, 1.0 + CLIP_EPSILON)
     loss_clipped = batch_advantages * ratio_clipped
 
-    # 5. 取最小值 (悲觀原則)
+    # 5. Take minimum (pessimistic principle)
     loss = -jnp.mean(jnp.minimum(loss_unclipped, loss_clipped))
     return loss
 
-# 計算梯度並更新
+# Compute gradients and update
 _, actor_grads = nnx.value_and_grad(actor_loss_fn)(self.actor)
 self.actor_optimizer.update(actor_grads)
 ```
 
-**關鍵：** 加負號 `-` 是因為 Adam 只能「最小化」，而我們要「最大化」Advantage
+**Key:** Add negative sign `-` because Adam can only "minimize", but we want to "maximize" Advantage
 
-## Q-Learning → DQN → PPO 演進總結
+## Q-Learning → DQN → PPO Evolution Summary
 
-| 特性 | Q-Learning | DQN | PPO |
-|------|-----------|-----|-----|
-| **學習對象** | Q 值 (價值) | Q 值 (價值) | 策略 (Policy) |
-| **函數近似** | ❌ Q-Table | ✅ 神經網路 | ✅ 神經網路 (Actor + Critic) |
-| **動作空間** | 離散 | 離散 | **連續 + 離散** |
-| **策略類型** | Off-Policy | Off-Policy | **On-Policy** |
-| **經驗回放** | ❌ | ✅ Replay Buffer | ❌ (Rollout Buffer) |
-| **穩定技術** | ❌ | Target Network | **PPO-Clip + GAE** |
-| **優勢函數** | ❌ | ❌ | ✅ |
-| **適用場景** | 小狀態空間 | 大狀態空間 + 離散動作 | **任何場景** (最通用) |
+| Feature | Q-Learning | DQN | PPO |
+|---------|-----------|-----|-----|
+| **Learning Target** | Q-value (value) | Q-value (value) | Policy |
+| **Function Approx** | ❌ Q-Table | ✅ Neural Network | ✅ Neural Network (A+C) |
+| **Action Space** | Discrete | Discrete | **Continuous + Discrete** |
+| **Policy Type** | Off-Policy | Off-Policy | **On-Policy** |
+| **Experience Replay** | ❌ | ✅ Replay Buffer | ❌ (Rollout Buffer) |
+| **Stabilization** | ❌ | Target Network | **PPO-Clip + GAE** |
+| **Advantage Function** | ❌ | ❌ | ✅ |
+| **Application** | Small state space | Large state + discrete | **Any scenario** (most general) |
 
-## PPO 的實際應用
+## PPO's Real-World Applications
 
-PPO 是目前工業界最受歡迎的 RL 演算法，應用包括：
+PPO is currently the most popular RL algorithm in industry, with applications including:
 
-1. **機器人控制**
-   - 機械臂抓取
-   - 四足機器人行走
-   - 無人機飛行
+1. **Robot Control**
+   - Robotic arm grasping
+   - Quadruped robot walking
+   - Drone flight
 
-2. **遊戲 AI**
+2. **Game AI**
    - OpenAI Five (Dota 2)
    - AlphaStar (StarCraft II)
-   - 各種連續控制遊戲
+   - Various continuous control games
 
-3. **大型語言模型對齊 (RLHF)**
-   - ChatGPT 的訓練
-   - Claude 的訓練
-   - **GRPO** (Group Relative Policy Optimization) 是 PPO 的變體
+3. **Large Language Model Alignment (RLHF)**
+   - ChatGPT training
+   - Claude training
+   - **GRPO** (Group Relative Policy Optimization) is a PPO variant
 
-4. **自動駕駛**
-   - 路徑規劃
-   - 速度控制
+4. **Autonomous Driving**
+   - Path planning
+   - Speed control
 
-## 進階主題
+## Advanced Topics
 
-### PPO 的變體
+### PPO Variants
 
 1. **PPO-Penalty**
-   - 使用 KL 散度懲罰代替 Clip
+   - Use KL divergence penalty instead of Clip
    - `Loss = Advantage - β × KL(π_new || π_old)`
 
-2. **GRPO** (用於 LLM)
+2. **GRPO** (for LLMs)
    - Group Relative Policy Optimization
-   - 專為大型語言模型設計的 PPO 變體
+   - PPO variant designed specifically for large language models
 
-### 進一步優化
+### Further Optimizations
 
 1. **Vectorized Environments**
-   - 同時運行多個環境副本
-   - 加速資料收集
+   - Run multiple environment copies simultaneously
+   - Accelerate data collection
 
 2. **Normalization**
-   - 狀態標準化
-   - 獎勵標準化
+   - State normalization
+   - Reward normalization
 
 3. **Learning Rate Scheduling**
-   - 學習率遞減
-   - 提高訓練後期的穩定性
+   - Learning rate decay
+   - Improve training stability in later stages
 
-## Flax NNX 關鍵 API 總結
+## Flax NNX Key API Summary
 
-### 1. 多網路管理
+### 1. Multiple Network Management
 
 ```python
-# 建立兩個獨立的網路
+# Create two independent networks
 actor_key, critic_key = jax.random.split(rng_key)
 self.actor = Actor(..., rngs=nnx.Rngs(actor_key))
 self.critic = Critic(..., rngs=nnx.Rngs(critic_key))
 ```
 
-### 2. 多優化器管理
+### 2. Multiple Optimizer Management
 
 ```python
-# 每個網路有自己的優化器
+# Each network has its own optimizer
 self.actor_optimizer = nnx.Optimizer(self.actor, optax.adam(3e-4))
 self.critic_optimizer = nnx.Optimizer(self.critic, optax.adam(1e-3))
 ```
 
-### 3. 梯度阻斷
+### 3. Gradient Blocking
 
 ```python
-# 在 select_action 時阻止 Critic 的梯度
+# Block Critic's gradient when select_action
 value = self.critic(state_jnp)
-value = jax.lax.stop_gradient(value)  # 不訓練 Critic
+value = jax.lax.stop_gradient(value)  # Don't train Critic
 ```
 
-### 4. RNG 流管理
+### 4. RNG Stream Management
 
 ```python
-# 建立 RNG 流
+# Create RNG stream
 self.rng_stream = nnx.Rngs(jax.random.PRNGKey(42))
 
-# 在需要隨機性時取得新密鑰
+# Get new key when randomness needed
 rng_key = self.rng_stream.sampler()
 action = action_dist.sample(seed=rng_key)
 ```
 
-## 參考資料
+## References
 
 - Schulman et al. (2017). "Proximal Policy Optimization Algorithms" ([arXiv:1707.06347](https://arxiv.org/abs/1707.06347))
 - Schulman et al. (2015). "High-Dimensional Continuous Control Using Generalized Advantage Estimation" ([arXiv:1506.02438](https://arxiv.org/abs/1506.02438))
