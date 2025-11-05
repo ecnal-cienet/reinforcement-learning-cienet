@@ -7,9 +7,9 @@
 **核心突破：** PPO 結合了 **Actor-Critic 架構**、**連續動作空間處理**、以及**穩定的策略更新機制**，是目前工業界最受歡迎的 RL 演算法之一。
 
 **與前兩個專案的關係：**
-- `1_Q_Learning/`: 學習 Q 值 (價值為基礎) - 表格型
-- `2_Cart_Pole_DQN/`: 學習 Q 值 (價值為基礎) - 深度學習 + 離散動作
-- `3_Pendulum/` **(本專案)**: 學習策略 (策略為基礎) - 深度學習 + **連續動作**
+- `2.Q_Learning/`: 學習 Q 值 (價值為基礎) - 表格型
+- `3.DQN/`: 學習 Q 值 (價值為基礎) - 深度學習 + 離散動作
+- `5.PPO/` **(本專案)**: 學習策略 (策略為基礎) - 深度學習 + **連續動作**
 
 ## 環境說明
 
@@ -75,13 +75,13 @@ pip install -r requirements.txt
 ### 執行程式
 
 ```bash
-python 3_Pendulum/pendulum.py
+python 5.PPO/5.1.pendulum/pendulum.py
 ```
 
-或者在 `3_Pendulum` 目錄內執行：
+或者在 `5.PPO/5.1.pendulum` 目錄內執行：
 
 ```bash
-cd 3_Pendulum
+cd 5.PPO/5.1.pendulum
 python pendulum.py
 ```
 

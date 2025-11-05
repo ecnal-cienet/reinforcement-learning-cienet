@@ -60,13 +60,13 @@ pip install -r requirements.txt
 ### 執行程式
 
 ```bash
-python 2_Cart_Pole_DQN/cart_pole_dqn.py
+python 3.DQN/3.1.Cart_Pole_DQN/cart_pole_dqn.py
 ```
 
-或者在 `2_Cart_Pole_DQN` 目錄內執行：
+或者在 `3.DQN/3.1.Cart_Pole_DQN` 目錄內執行：
 
 ```bash
-cd 2_Cart_Pole_DQN
+cd 3.DQN/3.1.Cart_Pole_DQN
 python cart_pole_dqn.py
 ```
 
@@ -385,7 +385,7 @@ self.optimizer.update(grads)
 - ❌ 只能「間接」學習策略 (通過 Q 值)
 
 **下一步：Policy Gradient 方法**
-- 參見 `3_Pendulum/` 的 PPO 實作
+- 參見 `5.PPO/` 的 PPO 實作
 - 直接學習策略 π(a|s)
 - 可處理連續動作
 

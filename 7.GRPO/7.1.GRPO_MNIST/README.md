@@ -7,10 +7,10 @@
 **核心突破：** GRPO 使用「群組平均表現」作為基線，取代了 PPO 中需要額外訓練的 Critic 網路，從而大幅降低記憶體需求。
 
 **與前三個專案的關係：**
-- `1_Q_Learning/`: 價值為基礎 - 表格型
-- `2_Cart_Pole_DQN/`: 價值為基礎 - 深度學習
-- `3_Pendulum/`: 策略為基礎 - Actor-Critic (PPO)
-- `4_GRPO_MNIST/` **(本專案)**: 策略為基礎 - **Critic-less** (GRPO)
+- `2.Q_Learning/`: 價值為基礎 - 表格型
+- `3.DQN/`: 價值為基礎 - 深度學習
+- `5.PPO/`: 策略為基礎 - Actor-Critic (PPO)
+- `7.GRPO/7.1.GRPO_MNIST/` **(本專案)**: 策略為基礎 - **Critic-less** (GRPO)
 
 ## 為什麼需要 GRPO？
 
@@ -120,13 +120,13 @@ pip install -r requirements.txt
 ### 執行程式
 
 ```bash
-python 4_GRPO_MNIST/grpo_mnist.py
+python 7.GRPO/7.1.GRPO_MNIST/grpo_mnist.py
 ```
 
-或者在 `4_GRPO_MNIST` 目錄內執行：
+或者在 `7.GRPO/7.1.GRPO_MNIST` 目錄內執行：
 
 ```bash
-cd 4_GRPO_MNIST
+cd 7.GRPO/7.1.GRPO_MNIST
 python grpo_mnist.py
 ```
 

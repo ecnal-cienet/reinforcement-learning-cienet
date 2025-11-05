@@ -51,13 +51,13 @@ pip install -r requirements.txt
 ### 執行程式
 
 ```bash
-python 1_Q_Learning/Q_Learning.py
+python 2.Q_Learning/2.1.Q_Learning/Q_Learning.py
 ```
 
-或者在 `1_Q_Learning` 目錄內執行：
+或者在 `2.Q_Learning/2.1.Q_Learning` 目錄內執行：
 
 ```bash
-cd 1_Q_Learning
+cd 2.Q_Learning/2.1.Q_Learning
 python Q_Learning.py
 ```
 
@@ -193,9 +193,9 @@ Training completed!
 ### 延伸閱讀
 
 要突破這些限制，可以學習：
-- **Deep Q-Network (DQN)**：使用神經網路取代 Q-Table → 參見 `2_Cart_Pole_DQN/`
-- **Policy Gradient 方法**：直接學習策略而非價值函數
-- **Actor-Critic 方法**：結合價值與策略 → 參見 `3_Pendulum/`
+- **Deep Q-Network (DQN)**：使用神經網路取代 Q-Table → 參見 `3.DQN/`
+- **Policy Gradient 方法**：直接學習策略而非價值函數 → 參見 `4.Policy_Gradients/`
+- **Actor-Critic 方法**：結合價值與策略 → 參見 `5.PPO/`
 
 ## 參考資料
 
