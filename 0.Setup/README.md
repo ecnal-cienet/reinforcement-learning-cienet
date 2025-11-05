@@ -51,8 +51,8 @@ python 5.PPO/5.1.pendulum/pendulum.py
 # 執行 GRPO on MNIST 實作
 python 7.GRPO/7.1.GRPO_MNIST/grpo_mnist.py
 
-# 執行 GRPO on MaxText 實作
-python 7.GRPO/7.2.GRPO_Maxtext/grpo_llama3_1_8b_demo_pw.py
+# GRPO on MaxText 實作需額外設定，請參考 7.GRPO/7.2.GRPO_Maxtext/README.md
+python 7.GRPO/7.2.GRPO_Maxtext/reinforcement_learning_grpo.py
 ```
 
 ---
