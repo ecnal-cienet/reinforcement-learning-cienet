@@ -1,8 +1,8 @@
-# Group Relative Policy Optimization (GRPO) 實作 - 大型語言模型訓練 (Qwen3-8B)
+# Group Relative Policy Optimization (GRPO) 實作 - 大型語言模型訓練 (Llama 3.1 8B)
 
 ## 概述
 
-這是一個將 **Group Relative Policy Optimization (GRPO)** 演算法應用於訓練 **Qwen3-8B 大型語言模型**的實作，目標是在 **GSM8K** (小學數學題) 基準測試上提升模型的數學推理能力。
+這是一個將 **Group Relative Policy Optimization (GRPO)** 演算法應用於訓練 **Llama 3.1 8B 大型語言模型**的實作，目標是在 **GSM8K** (小學數學題) 基準測試上提升模型的數學推理能力。
 
 **與 7.1.GRPO_MNIST 的關鍵差異：**
 - **模型規模**：80 億參數 Transformer vs. 小型 MLP
@@ -34,7 +34,7 @@ GRPO 是一種記憶體高效的強化學習演算法，專為提升 LLM 推理�
 
 - **Tunix**：GRPO 訓練編排框架
 - **vLLM**：高效能推理引擎，用於回應生成
-- **MaxText**：基於 JAX 的 LLM 實作，支援 Qwen3、Llama3、Gemma
+- **MaxText**：基於 JAX 的 LLM 實作，支援 Llama3、Qwen3、Gemma
 - **JAX/Flax NNX**：分散式訓練後端
 - **Orbax**：檢查點系統
 - **Optax**：AdamW 優化器與學習率調度
@@ -78,13 +78,13 @@ GRPO 是一種記憶體高效的強化學習演算法，專為提升 LLM 推理�
 
 ### 2. 獎勵函數
 
-四個互補的獎勵函數 (reinforcement_learning_grpo.py:642-833)：
+四個互補的獎勵函數 (reinforcement_learning_grpo.py:630-822)：
 
 | 獎勵函數 | 目的 | 獎勵/懲罰 |
 |---------|------|---------|
 | `match_format_exactly` | 完全符合格式 | +3.0 |
 | `match_format_approximately` | 部分格式 (標記計數) | 每個標記 +0.5，錯誤 -0.5 |
-| `check_answer` | 答案正確性 (含容錯) | 完全正確: +3.0，接近: +0.5/+0.25，錯誤: -1.0 |
+| `check_answer` | 答案正確性 (含容錯) | 完全正確: +3.0，白空格差異: +1.5，接近 ±10%: +0.5，接近 ±20%: +0.25，錯誤: -1.0 |
 | `check_numbers` | 後備數字提取 | 完全匹配: +1.5 |
 
 **設計理念：**
@@ -108,7 +108,7 @@ GRPO 是一種記憶體高效的強化學習演算法，專為提升 LLM 推理�
   6. 用梯度下降更新策略 (μ 次迭代)
 ```
 
-**關鍵參數 (reinforcement_learning_grpo.py:184-202)：**
+**關鍵參數 (reinforcement_learning_grpo.py:186-204)：**
 - `NUM_GENERATIONS = 2`：群組大小 (權衡：更好估計 vs. 計算量)
 - `BETA = 0.08`：KL 懲罰係數 (控制策略漂移)
 - `EPSILON = 0.2`：PPO clip 參數 (訓練穩定性)
@@ -117,13 +117,13 @@ GRPO 是一種記憶體高效的強化學習演算法，專為提升 LLM 推理�
 ### 4. 模型架構
 
 **策略模型 (Actor)：**
-- 基礎：Qwen3-8B transformer (可訓練)
+- 基礎：Llama 3.1 8B transformer (可訓練)
 - 精度：bfloat16 以提升記憶體效率
 - 訓練：全參數微調 (所有 80 億參數都更新)
-- 替代方案：LoRA 適配 (未來增強)
+- 替代方案：LoRA 適配 (未來增強，見第 578 行註解)
 
 **參考模型 (Reference)：**
-- 原始 Qwen3-8B 的凍結副本
+- 原始 Llama 3.1 8B 的凍結副本
 - 僅用於 KL 散度計算
 - 防止災難性遺忘
 - 確保訓練穩定性
@@ -175,6 +175,11 @@ source ~/$venv_name/bin/activate
 bash ~/maxtext/src/MaxText/examples/install_tunix_vllm_requirement.sh
 
 # 注意：此安裝可能需要數分鐘
+# 安裝完成後，確認已安裝所需套件：
+# - tunix (GRPO 訓練編排)
+# - vLLM (高效推理引擎)
+# - transformers (tokenizer)
+# - tensorflow-datasets (GSM8K 資料集)
 ```
 
 **參考資源：**
@@ -200,25 +205,32 @@ python reinforcement_learning_grpo.py
 ```python
 # 資料
 TRAIN_FRACTION = 1.0              # 使用 100% 資料 (無驗證集分割)
-NUM_BATCHES = 200                 # 要訓練的批次數
+NUM_BATCHES = 500                 # 要訓練的批次數 (原 tutorial 示範值)
+NUM_TEST_BATCHES = 200            # 測試批次數
 
 # 模型
-MODEL_CHECKPOINT_PATH = "gs://maxtext-model-checkpoints/qwen3-8b/unscanned/0/items"
+MODEL_CHECKPOINT_PATH = "gs://maxtext-model-checkpoints/llama3.1-8b/2025-01-23-19-04/scanned/0/items"
 
 # GRPO 演算法
 NUM_GENERATIONS = 2               # 每個 prompt 的回應數
 BETA = 0.08                       # KL 懲罰係數
 EPSILON = 0.2                     # PPO clip 參數
+NUM_ITERATIONS = 1                # 每批次的優化迭代次數
 
 # 優化器
 LEARNING_RATE = 3e-6              # 峰值學習率
+B1 = 0.9                          # AdamW beta1
+B2 = 0.99                         # AdamW beta2
+WEIGHT_DECAY = 0.1                # 權重衰減
 WARMUP_STEPS = MAX_STEPS 的 10%   # LR 暖身期
 MAX_GRAD_NORM = 0.1               # 梯度裁剪
 
 # 生成 (訓練期間)
 TEMPERATURE = 0.9                 # 高溫度以促進探索
 TOP_K = 50                        # Top-k 採樣
+TOP_P = 1.0                       # Top-p (nucleus) 採樣
 TOTAL_GENERATION_STEPS = 1024     # 要生成的最大 token 數
+MAX_PROMPT_LENGTH = 512           # 最大 prompt 長度
 ```
 
 ### 監控訓練
@@ -226,7 +238,7 @@ TOTAL_GENERATION_STEPS = 1024     # 要生成的最大 token 數
 **TensorBoard：**
 ```bash
 # 在另一個終端機
-tensorboard --logdir ~/content/tensorboard/grpo/logs_qwen3 --port=8086
+tensorboard --logdir ~/content/tensorboard/grpo/logs_llama3 --port=8086
 ```
 
 **要觀察的指標：**
@@ -238,13 +250,13 @@ tensorboard --logdir ~/content/tensorboard/grpo/logs_qwen3 --port=8086
 - `eval/format_accuracy`：格式符合率
 
 **JAX 效能分析：**
-- 追蹤儲存於：`~/content/jax_traces/grpo/profiles_qwen3/`
+- 追蹤儲存於：`~/content/jax_traces/grpo/profiles_llama3/`
 - 用以下工具分析：[Perfetto UI](https://ui.perfetto.dev/)
 
 ### 檢查點
 
 **自動儲存：**
-- 位置：`~/content/ckpts_qwen3/`
+- 位置：`~/content/ckpts_llama3/`
 - 頻率：每 500 步 (可透過 `SAVE_INTERVAL_STEPS` 配置)
 - 最多保留：4 個檢查點 (可透過 `MAX_TO_KEEP` 配置)
 
@@ -263,7 +275,7 @@ tensorboard --logdir ~/content/tensorboard/grpo/logs_qwen3 --port=8086
 
 ### 生成策略
 
-三種評估模式 (reinforcement_learning_grpo.py:278-287)：
+三種評估模式 (reinforcement_learning_grpo.py:280-289)：
 
 ```python
 GENERATION_CONFIGS = {
@@ -296,11 +308,11 @@ evaluate(test_dataset, rl_cluster, **GENERATION_CONFIGS["greedy"])
 
 | 階段 | 答案準確率 | 格式準確率 | 備註 |
 |------|----------|-----------|------|
-| 訓練前 | ~5-10% | ~20-30% | 基礎 Qwen3-8B 效能 |
-| 200 批次後 | ~15-25% | ~60-80% | 先學會格式 |
-| 3738 批次後 | ~30-40% | ~90%+ | 完全收斂 (非示範版) |
+| 訓練前 | ~5-10% | ~20-30% | 基礎 Llama 3.1 8B 效能 |
+| 500 批次後 | ~15-25% | ~60-80% | 先學會格式 |
+| 持續訓練 | ~30-40% | ~90%+ | 完全收斂 (需更多批次) |
 
-**注意**：示範使用 `NUM_BATCHES=200` 以快速迭代。生產環境結果請增加至 3738+ 批次。
+**注意**：示範使用 `NUM_BATCHES=500` 以快速迭代。生產環境結果請視需求調整訓練批次數。
 
 ### 輸出演化範例
 
@@ -330,64 +342,124 @@ evaluate(test_dataset, rl_cluster, **GENERATION_CONFIGS["greedy"])
 
 ### 主要組件
 
-**步驟 0-1：設置 (第 60-304 行)**
-- 匯入函式庫 (Tunix、MaxText、JAX/Flax)
-- 配置超參數
-- 環境設置 (`SKIP_JAX_PRECOMPILE=1` 用於 vLLM)
+**步驟 0-1：設置與超參數配置 (第 56-306 行)**
+- 匯入函式庫：Tunix (GRPO)、MaxText (模型)、JAX/Flax (訓練) (第 60-90 行)
+- 環境設置：`SKIP_JAX_PRECOMPILE=1` 用於加速 vLLM 啟動 (第 92-106 行)
+- 超參數配置 (第 128-305 行)：
+  - 資料配置：資料目錄、訓練比例 (第 138-150 行)
+  - 模型與檢查點：MODEL_CHECKPOINT_PATH, LOG_DIR, CKPT_DIR (第 153-182 行)
+  - GRPO 演算法：NUM_GENERATIONS, BETA, EPSILON (第 185-203 行)
+  - 生成參數：TEMPERATURE, TOP_K, TOP_P (第 206-225 行)
+  - 訓練配置：BATCH_SIZE, NUM_BATCHES (第 228-249 行)
+  - 優化器：LEARNING_RATE, B1, B2, WEIGHT_DECAY (第 252-274 行)
+  - 評估配置：GENERATION_CONFIGS (第 277-289 行)
+  - 獎勵參數：REWARD_* 和 PENALTY_* 常數 (第 292-305 行)
 
-**步驟 2-3：工具與資料 (第 306-463 行)**
-- `show_hbm_usage()`：監控 TPU/GPU 記憶體
-- Tokenizer 設置 (Qwen3)
-- 資料集載入與預處理 (GSM8K)
+**步驟 2：工具函數 (第 308-324 行)**
+- `show_hbm_usage()`：監控 TPU/GPU HBM 記憶體使用情況
 
-**步驟 4-5：模型 (第 465-638 行)**
-- 載入參考模型 (凍結)
-- 載入策略模型 (可訓練)
+**步驟 3：資料預處理與 Tokenizer (第 326-365 行)**
+- 載入 Llama 3.1 8B tokenizer (meta-llama/Llama-3.1-8B)
+- 定義結構化輸出格式標記 (`<reasoning>`, `<answer>`)
+- 創建 prompt 模板 (SYSTEM_PROMPT + TEMPLATE)
+
+**步驟 4：資料集創建 (第 367-451 行)**
+- `extract_hash_answer()`：從 GSM8K 答案中提取數值 (第 375-388 行)
+- `get_dataset()`：載入並預處理 GSM8K 資料集 (第 391-429 行)
+- 創建訓練、驗證、測試資料集 (第 432-450 行)
+
+**步驟 5：模型載入 (第 453-618 行)**
+- `get_ref_maxtext_model()`：創建 TunixMaxTextAdapter 包裝器 (第 490-509 行)
+- 載入參考模型 `llama3_8b` (凍結) (第 514-567 行)
+- 載入策略模型 `llama3_8b_policy` (可訓練) (第 570-617 行)
 - 兩個模型最初使用相同檢查點
 - 每階段的記憶體分析
 
-**步驟 6：獎勵函數 (第 640-833 行)**
-- `match_format_exactly()`
-- `match_format_approximately()`
-- `check_answer()`
-- `check_numbers()`
+**步驟 6：獎勵函數定義 (第 620-813 行)**
+- 正則表達式定義：`match_format` (第 649-657 行)
+- `match_format_exactly()`：完全符合格式獎勵 +3.0 (第 663-682 行)
+- `match_format_approximately()`：部分格式符合 (每個標記 +0.5/-0.5) (第 688-711 行)
+- `check_answer()`：答案正確性檢查 (完全正確 +3.0，白空格差異 +1.5，接近 ±10% +0.5，±20% +0.25，錯誤 -1.0) (第 719-761 行)
+- `check_numbers()`：後備數字提取，完全匹配 +1.5 (第 775-812 行)
 
-**步驟 7：評估 (第 835-1050 行)**
-- `generate_responses()`：vLLM 生成
-- `score_responses()`：套用獎勵函數
-- `evaluate()`：完整評估流程
+**步驟 7：評估函數 (第 815-1030 行)**
+- `generate_responses()`：使用 vLLM 生成多輪回應 (第 839-881 行)
+- `score_responses()`：為單個問題評分 (第 884-936 行)
+- `evaluate()`：完整評估流程，計算準確率與格式正確率 (第 939-1029 行)
 
-**步驟 8：訓練流程 (第 1052-1282 行)**
-- `main()`：編排整個工作流程
-- 設置優化器 (AdamW + warmup-cosine)
-- 建立 RL cluster (Tunix)
-- 初始化 GRPO learner
-- 執行訓練迴圈
-- 訓練前/後評估
+**步驟 8：主訓練流程 (第 1032-1262 行)**
+- `main()`：編排整個 GRPO 工作流程
+  - 設置檢查點與 TensorBoard 日誌 (第 1069-1079 行)
+  - 建立 AdamW 優化器與 warmup-cosine decay 學習率 (第 1081-1105 行)
+  - 配置 RL Cluster (Actor/Reference/Rollout 三角色) (第 1107-1141 行)
+  - 初始化 GRPO Learner 與獎勵函數 (第 1143-1171 行)
+  - 訓練前評估 (第 1182-1201 行)
+  - 執行 GRPO 訓練迴圈 (第 1203-1234 行)
+  - 訓練後評估與結果比較 (第 1236-1258 行)
+
+### 關鍵變數命名
+
+程式碼中使用的主要變數：
+
+**模型相關：**
+- `llama3_8b`：參考模型 (Reference Model，凍結)
+- `llama3_8b_policy`：策略模型 (Policy Model，可訓練的 Actor)
+- `model_tokenizer`：Llama 3.1 8B tokenizer
+- `mesh` / `mesh_policy`：JAX mesh 用於分散式訓練
+
+**資料集相關：**
+- `DATASET`：完整 GSM8K 訓練資料集
+- `train_dataset`：實際用於訓練的資料集
+- `test_dataset`：測試/評估資料集
+- `val_dataset`：驗證資料集 (若 TRAIN_FRACTION < 1.0)
+
+**訓練相關：**
+- `rl_cluster`：RL 叢集，整合 Actor/Reference/Rollout
+- `grpo_trainer`：GRPO 學習器，包含獎勵函數與訓練邏輯
+- `cluster_config`：叢集配置 (mesh、引擎、訓練參數)
+- `grpo_config`：GRPO 專用超參數 (beta, epsilon, 等)
 
 ### 關鍵設計模式
 
 **MaxText 模型包裝器：**
 ```python
 def get_ref_maxtext_model(config):
-    """為 GRPO 訓練建立 TunixMaxTextAdapter"""
-    model, mesh = model_creation_utils.create_nnx_model(config)
-    with mesh:
+    """創建 TunixMaxTextAdapter 模型與 mesh"""
+    model, this_mesh = model_creation_utils.create_nnx_model(config)
+    with this_mesh:
         tunix_model = TunixMaxTextAdapter(base_model=model)
-    return tunix_model, mesh
+        this_model_config = llama3_lib.ModelConfig.llama3_1_8b()
+        tunix_model.config = this_model_config
+    return tunix_model, this_mesh
+
+# 使用範例：
+llama3_8b, mesh = get_ref_maxtext_model(config_ref)           # 參考模型
+llama3_8b_policy, mesh_policy = get_ref_maxtext_model(config_policy)  # 策略模型
 ```
 
 **RL Cluster 配置：**
 ```python
+# 創建 RL Cluster 配置
 cluster_config = rl_cluster_lib.ClusterConfig(
     role_to_mesh={
-        Role.ACTOR: mesh,          # 策略模型
-        Role.REFERENCE: mesh,      # 凍結參考
-        Role.ROLLOUT: mesh,        # vLLM 引擎
+        rl_cluster_lib.Role.ACTOR: mesh,        # 策略模型 mesh
+        rl_cluster_lib.Role.REFERENCE: mesh,    # 參考模型 mesh
+        rl_cluster_lib.Role.ROLLOUT: mesh,      # vLLM rollout mesh
     },
     rollout_engine="vllm",
+    rollout_vllm_model_version="meta-llama/Llama-3.1-8B",
+    rollout_vllm_hbm_utilization=0.2,
+    rollout_vllm_tpu_backend_type="jax",
     training_config=RLTrainingConfig(...),
     rollout_config=RolloutConfig(...),
+)
+
+# 初始化 RL Cluster
+rl_cluster = rl_cluster_lib.RLCluster(
+    actor=llama3_8b_policy,       # 策略模型 (可訓練)
+    reference=llama3_8b,          # 參考模型 (凍結)
+    tokenizer=model_tokenizer,    # Tokenizer
+    cluster_config=cluster_config,
 )
 ```
 
@@ -398,20 +470,24 @@ cluster_config = rl_cluster_lib.ClusterConfig(
 為提升記憶體效率，考慮使用低秩適配 (Low-Rank Adaptation) 而非全參數微調：
 
 ```python
-# TODO: 實作 LoRA (見 reinforcement_learning_grpo.py:589)
+# 目前實作：全參數微調
+# TODO: 實作 LoRA (Low-Rank Adaptation)
 # 好處：
 # - 凍結基礎模型權重
 # - 只訓練小型適配矩陣
 # - 10-100 倍記憶體減少
-# - 更快的訓練
+# - 更快的訓練速度
+#
+# 參考：reinforcement_learning_grpo.py 第 473-476 行註解
 ```
 
 ### 量化感知訓練
 
-使用 Qwix 進行更低精度：
-- 目前：bfloat16
-- 替代：int8/int4 配合量化感知訓練
-- 權衡：記憶體/速度 vs. 準確性
+使用 Qwix 進行更低精度訓練：
+- **目前實作**：bfloat16 (見 config 中 `weight_dtype="bfloat16"`)
+- **替代方案**：int8/int4 配合量化感知訓練
+- **權衡**：記憶體/速度效益 vs. 模型準確性損失
+- **參考**：reinforcement_learning_grpo.py 第 481 行註解
 
 ### 多主機分散式訓練
 
@@ -446,48 +522,6 @@ grpo_trainer = GrpoLearner(
 )
 ```
 
-## 疑難排解
-
-### 記憶體問題
-
-**症狀：** OOM 錯誤、HBM 耗盡
-
-**解決方案：**
-1. 減少 `NUM_GENERATIONS` (2 → 1)
-2. 降低 `BATCH_SIZE` (1 → 1 已是最小值)
-3. 減少 `TOTAL_GENERATION_STEPS` (1024 → 512)
-4. 增加 `rollout_vllm_hbm_utilization` (0.2 → 0.3)
-5. 啟用 LoRA 微調
-
-### vLLM 初始化失敗
-
-**症狀：** `AsyncioEventLoop already running`
-
-**解決方案：**
-```python
-import nest_asyncio
-nest_asyncio.apply()
-```
-
-### 訓練準確率低
-
-**症狀：** 訓練後無改善
-
-**解決方案：**
-1. 增加 `NUM_BATCHES` (200 → 3738)
-2. 增加 `NUM_GENERATIONS` (2 → 4)
-3. 調整獎勵函數權重
-4. 降低 `LEARNING_RATE` (3e-6 → 1e-6)
-5. 在 TensorBoard 檢查獎勵訊號
-
-### JAX 分散式錯誤
-
-**症狀：** `skip_jax_distributed_system` 警告
-
-**解決方案：**
-- 目前配置針對單主機優化
-- 多主機請參考 MaxText 分散式訓練文件
-
 ## 學習成果
 
 完成本模組後，你應該理解：
@@ -504,7 +538,7 @@ nest_asyncio.apply()
 | 面向 | 7.1.GRPO_MNIST | 7.2.GRPO_Maxtext |
 |------|----------------|------------------|
 | **任務** | 數字分類 | 數學應用題 |
-| **模型** | 3 層 MLP (~1 萬參數) | Qwen3-8B transformer (80 億參數) |
+| **模型** | 3 層 MLP (~1 萬參數) | Llama 3.1 8B transformer (80 億參數) |
 | **輸入** | 28×28 圖片 → 784D 向量 | 文字 prompt → tokens |
 | **輸出** | 10D logits (數字 0-9) | 自回歸文字 |
 | **動作空間** | 離散 (10 類) | 離散 (詞彙量 ~15 萬) |
@@ -520,7 +554,7 @@ nest_asyncio.apply()
 - [GSM8K 資料集](https://arxiv.org/abs/2110.14168) - "Training Verifiers to Solve Math Word Problems"
 - [vLLM 文件](https://docs.vllm.ai/)
 - [Tunix 文件](https://github.com/google/maxtext/tree/main/src/tunix)
-- [Qwen3 模型卡](https://huggingface.co/Qwen/Qwen3-8B)
+- [Llama 3.1 模型卡](https://huggingface.co/meta-llama/Llama-3.1-8B)
 
 ## 下一步
 

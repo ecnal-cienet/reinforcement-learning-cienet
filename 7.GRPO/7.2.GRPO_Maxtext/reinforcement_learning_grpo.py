@@ -17,7 +17,7 @@
 GRPO (Group Relative Policy Optimization) Tutorial
 ===================================================
 
-This tutorial demonstrates training the Qwen3-8B model on the GSM8K math reasoning
+This tutorial demonstrates training the Llama 3.1 8B model on the GSM8K math reasoning
 benchmark using Group Relative Policy Optimization (GRPO).
 
 What is GRPO?
@@ -101,7 +101,7 @@ os.environ["SKIP_JAX_PRECOMPILE"] = "1"
 jax.devices()
 
 # Global settings
-DEBUG = False  # Set to True for detailed debug output during training
+DEBUG = True  # Set to True for detailed debug output during training
 HOME = os.path.join(os.path.expanduser("~"), "")
 print(f"Home directory (from Python): {HOME}")
 
@@ -153,20 +153,22 @@ TRAIN_FRACTION = 1.0
 # MODEL & CHECKPOINT CONFIGURATION
 # ==============================================================================
 # Path to pre-trained model checkpoint (can be local or GCS path)
-MODEL_CHECKPOINT_PATH = "gs://maxtext-model-checkpoints/qwen3-8b/unscanned/0/items"
+# For Llama 3 8B, you'll need to convert the HuggingFace checkpoint to MaxText format
+# See: /maxtext/src/MaxText/utils/ckpt_conversion/to_maxtext.py
+MODEL_CHECKPOINT_PATH = "gs://maxtext-model-checkpoints/llama3.1-8b/2025-01-23-19-04/scanned/0/items"
 
 # Directory for TensorBoard logs (training metrics visualization)
-LOG_DIR = os.path.join(HOME, "content", "tensorboard", "grpo", "logs_qwen3", "")
+LOG_DIR = os.path.join(HOME, "content", "tensorboard", "grpo", "logs_llama3", "")
 if not os.path.exists(LOG_DIR):
   os.makedirs(LOG_DIR)
 
 # Directory for JAX profiling traces (performance analysis)
-PROFILE_DIR = os.path.join(HOME, "content", "jax_traces", "grpo", "profiles_qwen3", "")
+PROFILE_DIR = os.path.join(HOME, "content", "jax_traces", "grpo", "profiles_llama3", "")
 if not os.path.exists(PROFILE_DIR):
   os.makedirs(PROFILE_DIR)
 
 # Directory for saving training checkpoints
-CKPT_DIR = os.path.join(HOME, "content", "ckpts_qwen3", "")
+CKPT_DIR = os.path.join(HOME, "content", "ckpts_llama3", "")
 if not os.path.exists(CKPT_DIR):
   os.makedirs(CKPT_DIR)
 
@@ -230,7 +232,7 @@ BATCH_SIZE = 1
 
 # Number of batches to train on
 # Increase for better results (original: 3738, reduced for demo)
-NUM_BATCHES = 200  # 200
+NUM_BATCHES = 500  # 200
 
 # Number of batches to use for testing/evaluation
 # Keep low for quick evaluation (max 330 if batch_size=4)
@@ -326,7 +328,7 @@ def show_hbm_usage():
 # ==============================================================================
 #
 # This section:
-# 1. Loads the tokenizer for Qwen3-8B
+# 1. Loads the tokenizer for Llama 3.1 8B
 # 2. Defines special tokens for structured output (reasoning + answer format)
 # 3. Creates prompt templates for the GSM8K math reasoning task
 #
@@ -339,12 +341,8 @@ def show_hbm_usage():
 #   - Extracting and verifying the final answer
 #   - Providing clearer rewards during RL training
 
-# Load tokenizer for Qwen3-8B (using local assets)
-# Find MaxText package installation directory and construct tokenizer path
-import MaxText
-maxtext_pkg_dir = os.path.dirname(MaxText.__file__)
-tokenizer_path = os.path.join(maxtext_pkg_dir, "assets", "qwen3-tokenizer")
-model_tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+# Load tokenizer for Llama 3.1 8B from HuggingFace
+model_tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B")
 
 # Define special tokens for structured output format
 reasoning_start = "<reasoning>"
@@ -358,7 +356,7 @@ provide your reasoning. Place it between {reasoning_start} and \
 {reasoning_end}. Then, provide the final answer (i.e., just one numerical \
 value) between {solution_start} and {solution_end}."""
 
-# Chat template format (compatible with Gemma-style chat format)
+# Chat template format (plain text - will be formatted by tokenizer's chat template)
 TEMPLATE = """<start_of_turn>user
 {system_prompt}
 
@@ -417,23 +415,13 @@ def get_dataset(data_dir, split="train") -> grain.MapDataset:
       .shuffle(seed=SEED)
       .map(
           lambda x: {
-              # passed to model forward pass
-              "prompts": model_tokenizer.apply_chat_template(
-                  [
-                      {
-                          "role": "user",
-                          "content": TEMPLATE.format(
-                              system_prompt=SYSTEM_PROMPT,
-                              question=x["question"].decode("utf-8"),
-                          ),
-                      },
-                  ],
-                  tokenize=False,
-                  add_generation_prompt=True,
+              # Prompts are passed to model forward pass
+              "prompts": TEMPLATE.format(
+                  system_prompt=SYSTEM_PROMPT,
+                  question=x["question"].decode("utf-8"),
               ),
-              # passed to reward functions
+              # Question and answer are passed to reward functions
               "question": x["question"].decode("utf-8"),
-              # passed to reward functions
               "answer": extract_hash_answer(x["answer"].decode("utf-8")),
           }
       )
@@ -498,9 +486,6 @@ show_hbm_usage()
 
 # ### Helper function to create MaxText models
 
-# TODO: @mazumdera: create a installation script for GRPO
-# ! uv pip install -r ../../maxtext/requirements.txt
-
 
 def get_ref_maxtext_model(config):
   """Creates and returns a TunixMaxTextAdapter model and mesh.
@@ -526,7 +511,7 @@ def get_ref_maxtext_model(config):
 
 model_config = llama3_lib.ModelConfig.llama3_1_8b()
 
-# Load the reference model
+# Configure and load the reference model
 # Note: pass the path to your scanned checkpoint for "load_parameters_path".
 # To create a scanned checkpoint, you can use /maxtext/src/MaxText/utils/ckpt_conversion/to_maxtext.py
 config_ref = pyconfig.initialize(
@@ -535,16 +520,16 @@ config_ref = pyconfig.initialize(
         f"{HOME}/maxtext/src/MaxText/configs/base.yml",
     ],
     base_output_directory="dummy",  # This is not used in Tunix.
-    run_name="test-tunix-maxtext-qwen3-8b",
-    # tokenizer_type="huggingface",
-    tokenizer_path=os.path.join(MAXTEXT_ASSETS_ROOT, "qwen3-tokenizer"),
+    run_name="test-tunix-maxtext-llama3.1-8b",
+    tokenizer_type="huggingface",
+    tokenizer_path="meta-llama/Llama-3.1-8B",
     load_parameters_path=MODEL_CHECKPOINT_PATH,
     per_device_batch_size=1,
     max_prefill_predict_length=4,
     max_target_length=1024,
     steps=10,
     async_checkpointing="false",
-    model_name="qwen3-8b",
+    model_name="llama3.1-8b",
     checkpoint_period=5,
     skip_jax_distributed_system="true",
     weight_dtype="bfloat16",
@@ -556,11 +541,11 @@ config_ref = pyconfig.initialize(
     value_proj="offload",
 )
 
-qwen3_8b, mesh = get_ref_maxtext_model(config_ref)
+llama3_8b, mesh = get_ref_maxtext_model(config_ref)
 
-qwen3_8b.config = model_config
+llama3_8b.config = model_config
 
-nnx.display(qwen3_8b)
+nnx.display(llama3_8b)
 
 
 if DEBUG:
@@ -569,7 +554,7 @@ if DEBUG:
   print(f"Model config: {model_config}")
 
   # Sanity check that weights are loaded correctly
-  _maxtext_state_flatten = nnx.state(qwen3_8b).flat_state()
+  _maxtext_state_flatten = nnx.state(llama3_8b).flat_state()
   maxtext_state_flatten = {".".join(str(key) for key in keys): v for keys, v in _maxtext_state_flatten}
   print(
       f"maxtext_state_flatten[base.token_embedder.embedding].value="
@@ -582,28 +567,23 @@ print("HBM usage after loading ref model:")
 show_hbm_usage()
 
 
-# Load the policy model
-# Note: pass the path to your scanned checkpoint for "load_parameters_path".
-# To create a scanned checkpoint, you can use /maxtext/src/MaxText/utils/ckpt_conversion/to_maxtext.py
-
-# TODO: @mazumdera: change this to use lora
-
+# Configure and load the policy model
 config_policy = pyconfig.initialize(
     [
         "",
         f"{HOME}/maxtext/src/MaxText/configs/base.yml",
     ],
     base_output_directory="dummy",  # This is not used in Tunix.
-    run_name="test-tunix-maxtext-qwen3-8b",  # This is not used in Tunix.
-    # tokenizer_type="huggingface",
-    tokenizer_path=os.path.join(MAXTEXT_ASSETS_ROOT, "qwen3-tokenizer"),
+    run_name="test-tunix-maxtext-llama3.1-8b",  # This is not used in Tunix.
+    tokenizer_type="huggingface",
+    tokenizer_path="meta-llama/Llama-3.1-8B",
     load_parameters_path=MODEL_CHECKPOINT_PATH,
     per_device_batch_size=1,
     max_prefill_predict_length=4,
     max_target_length=1024,
     steps=10,
     async_checkpointing="false",
-    model_name="qwen3-8b",
+    model_name="llama3.1-8b",
     checkpoint_period=5,
     skip_jax_distributed_system="true",
     weight_dtype="bfloat16",
@@ -614,18 +594,18 @@ config_policy = pyconfig.initialize(
     key_proj="offload",
     value_proj="offload",
 )
-qwen3_8b_policy, mesh_policy = get_ref_maxtext_model(config_policy)
+llama3_8b_policy, mesh_policy = get_ref_maxtext_model(config_policy)
 
-qwen3_8b_policy.config = model_config
+llama3_8b_policy.config = model_config
 
-nnx.display(qwen3_8b_policy)
+nnx.display(llama3_8b_policy)
 
 if DEBUG:
   print("Model initialized successfully")
   print(f"Model mesh shape: {mesh_policy.shape}")
 
   # Sanity check that weights are loaded correctly
-  _maxtext_state_flatten = nnx.state(qwen3_8b_policy).flat_state()
+  _maxtext_state_flatten = nnx.state(llama3_8b_policy).flat_state()
   maxtext_state_flatten = {".".join(str(key) for key in keys): v for keys, v in _maxtext_state_flatten}
   print(
       f"maxtext_state_flatten[base.token_embedder.embedding].value="
@@ -1155,7 +1135,7 @@ def main():
           top_p=TOP_P,                                      # Nucleus sampling
           top_k=TOP_K,                                      # Top-k sampling
       ),
-      rollout_vllm_model_version="Qwen/Qwen3-8B",  # HuggingFace model ID for vLLM
+      rollout_vllm_model_version="meta-llama/Llama-3.1-8B",  # HuggingFace model ID for vLLM
       rollout_vllm_hbm_utilization=0.2,            # vLLM memory usage (20%)
       rollout_vllm_tpu_backend_type="jax",         # Use JAX backend for vLLM
   )
@@ -1172,8 +1152,8 @@ def main():
 
   # Create RL Cluster: combines models and configuration
   rl_cluster = rl_cluster_lib.RLCluster(
-      actor=qwen3_8b_policy,           # Policy model (trainable)
-      reference=qwen3_8b,              # Reference model (frozen)
+      actor=llama3_8b_policy,          # Policy model (trainable)
+      reference=llama3_8b,             # Reference model (frozen)
       tokenizer=model_tokenizer,       # Tokenizer for both models
       cluster_config=cluster_config,   # Cluster configuration
   )
@@ -1234,15 +1214,16 @@ def main():
   print("STARTING GRPO TRAINING")
   print("="*80 + "\n")
 
-  # Start JAX profiler to analyze performance
-  jax.profiler.start_trace(PROFILE_DIR)
+  # Start JAX profiler for performance analysis
+  # Uncomment to enable profiling (note: generates large trace files for long training runs)
+  # jax.profiler.start_trace(PROFILE_DIR)
 
   # Run training with proper mesh and axis rules for distributed training
   with mesh, nn_partitioning.axis_rules(config_policy.logical_axis_rules):
     grpo_trainer.train(DATASET)
 
-  # Stop profiler
-  jax.profiler.stop_trace()
+  # Stop profiler (uncomment if profiling is enabled above)
+  # jax.profiler.stop_trace()
 
   print("\n" + "="*80)
   print("TRAINING COMPLETE")
